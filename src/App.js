@@ -1,24 +1,51 @@
 import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import { Tab, Row, Col, Nav } from "react-bootstrap";
+
+import Header from "./Header";
+import Image from "./Steganography/Image";
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div>
+      <Header />
+      <div className="content-fluid">
+        <Tab.Container defaultActiveKey="image-steganography">
+          <Row>
+            <Col sm={2}>
+              <Nav variant="pills" className="flex-column">
+                <Nav.Item>
+                  <Nav.Link eventKey="image-steganography">
+                    Image Steganography
+                  </Nav.Link>
+                </Nav.Item>
+                <Nav.Item>
+                  <Nav.Link eventKey="video-steganography">
+                    Video Steganography
+                  </Nav.Link>
+                </Nav.Item>
+                <Nav.Item>
+                  <Nav.Link eventKey="audio-steganography">
+                    Audio Steganography
+                  </Nav.Link>
+                </Nav.Item>
+              </Nav>
+            </Col>
+            <Col sm={10} className="content-center">
+              <Tab.Content className="full-width">
+                <Tab.Pane eventKey="image-steganography">
+                  <Image/>
+                </Tab.Pane>
+                <Tab.Pane eventKey="video-steganography">
+                  video-steganography
+                </Tab.Pane>
+                <Tab.Pane eventKey="audio-steganography">
+                  audio-steganography
+                </Tab.Pane>
+              </Tab.Content>
+            </Col>
+          </Row>
+        </Tab.Container>
+      </div>
     </div>
   );
 }
