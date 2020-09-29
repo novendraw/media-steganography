@@ -83,11 +83,12 @@ export default class Image extends React.PureComponent {
     if (sourceLength / 8 >= keyLength) {
       let keyString = this.getRGBAString(keyImgData, encryptionKey);
       let result = [];
-      for (let i = 0; i < sourceImgData.data.length; i++) {
+      for (let i = 0; i < sourceLength; i++) {
         let color = sourceImgData.data[i].toString(2);
         if (hidingOption === "sequence") {
-          if (i < keyLength) {
+          if (i < keyLength * 8) {
             color = color.substr(0, color.length-1) + keyString[i];
+          } else {
           }
         } else {
           //hidingOption === "random"
@@ -109,6 +110,34 @@ export default class Image extends React.PureComponent {
     return result;
   }
 
+  getLSB(sourceImgURL, keyImgURL, hidingOption) {
+    let sourceImgData = this.getImageData(sourceImgURL);
+    let keyImgData = this.getImageData(keyImgURL);
+    let sourceLength = sourceImgData.data.length;
+    let keyLength = keyImgData.data.length;
+    let result = [];
+    let temp = "";
+    for (let i = 0; i < keyLength * 8 && i < sourceLength; i++) {
+      if (hidingOption === "sequence") {
+        let color = sourceImgData.data[i].toString(2);
+        let lsb = color[color.length-1];
+        if (temp.length < 8) {
+          if (i === keyLength-1) {
+            result.push(temp);
+          } else {
+            temp += lsb;
+          }
+        } else {
+          result.push(temp);
+          temp = lsb;
+        }
+      } else {
+        // If hidingOption === "random"
+      }
+    }
+    return result;
+  }
+
   handleSubmit = (event) => {
     event.preventDefault();
     let sourceImg = event.target.inputSourceImg;
@@ -125,7 +154,10 @@ export default class Image extends React.PureComponent {
           resultArray = this.convertToDecimalArray(resultArray);
           let resultImg = this.renderResultImg(sourceImgURL, resultArray);
         } else {
-          //Extract
+          let resultArray = this.getLSB(sourceImgURL, keyImgURL, hidingOption);
+          resultArray = this.convertToDecimalArray(resultArray);
+          console.log(resultArray);
+          let resultImg = this.renderResultImg(keyImgURL, resultArray);
         }
       } else {
         //BCPS
@@ -177,14 +209,21 @@ export default class Image extends React.PureComponent {
     canvas.height = image.height;
 
     let steganoClampedArray = new Uint8ClampedArray(steganoArray);
-    console.log(steganoArray);
-    console.log(steganoClampedArray);
     let steganoImgData = new ImageData(steganoClampedArray, image.width, image.height);
 
     context.putImageData(steganoImgData, 0, 0);
     let resultImg = new Image();
     resultImg.src = canvas.toDataURL();
     this.setState({resultImgURL: resultImg.src});
+  }
+
+  download(url) {
+    let elem = document.createElement('a');
+    elem.href = url;
+    elem.download = "test.bmp";
+    document.body.appendChild(elem);
+    elem.click();        
+    document.body.removeChild(elem);
   }
 
   render() {
@@ -228,7 +267,8 @@ export default class Image extends React.PureComponent {
                 variant="success"
                 type="button"
                 className="margin-bottom-xs"
-                onClick={() => downloadFile("result", resultImg)}
+                // onClick={() => downloadFile("result", resultImg)}
+                onClick={() => this.download(resultImgURL)}
               >
                 {" "}
                 Download Result
