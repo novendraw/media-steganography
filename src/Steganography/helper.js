@@ -1,3 +1,44 @@
+function encodeFile(plainText, key) {
+  let cipherText = []
+  plainText = new Int8Array(plainText);
+
+  let keyCodes = getKeys(key);
+  console.log(plainText);
+  for (let i = 0; i < plainText.length; i++) {
+    let charNum = plainText[i];
+    let currentKey = keyCodes[i % keyCodes.length];
+
+    charNum = (((charNum + currentKey) % 256) + 256) % 256;
+    cipherText.push(charNum);
+  }
+
+  let int8cipherText = new Int8Array(cipherText);
+
+  console.log(int8cipherText)
+
+  return int8cipherText;
+}
+
+/* Decoding */
+function decodeFile(cipherText, key) {
+  let plainText = [];
+  cipherText = new Int8Array(cipherText);
+
+  let keyCodes = getKeys(key);
+
+  for (let i = 0; i < cipherText.length; i++) {
+    let charNum = cipherText[i];
+    let currentKey = keyCodes[i % keyCodes.length];
+
+    charNum = (((charNum - currentKey) % 256) + 256) % 256;
+    plainText.push(charNum);
+  }
+
+  let int8plainText = new Int8Array(plainText);
+
+  return int8plainText;
+}
+
 function convertArrayBufferToString(array) {
   let text = "";
   for (let i = 0; i < array.length; i++) {
@@ -104,6 +145,8 @@ function coprime(a, b) {
 }
 
 export {
+  encodeFile,
+  decodeFile,
   convertArrayBufferToString,
   readFileAsArrayBuffer,
   readFileAsString,
