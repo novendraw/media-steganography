@@ -6,6 +6,16 @@ function convertArrayBufferToString(array) {
   return text;
 }
 
+function convertArrayBufferToBinaryString(array) {
+  let text = "";
+  for (let i = 0; i < array.length; i++) {
+    let data = array[i].toString(2);
+    data = "00000000".substr(data.length) + data;
+    text += data;
+  }
+  return text;
+}
+
 function readFileAsArrayBuffer(file) {
   return new Promise((resolve, reject) => {
     let reader = new FileReader();
@@ -50,15 +60,16 @@ function downloadFile(filename, data) {
   }
 }
 
-function downloadBinaryFile(filename, extension, buffer) {
+function downloadBinaryFile(filename, buffer) {
+  console.log(filename);
   if (buffer) {
     let blob = new Blob([buffer], {type: 'application/octet-stream'});
     if (window.navigator.msSaveOrOpenBlob) {
-      window.navigator.msSaveBlob(blob, filename + '.' + extension);
+      window.navigator.msSaveBlob(blob, filename);
     } else {
       let elem = window.document.createElement('a');
       elem.href = window.URL.createObjectURL(blob);
-      elem.download = filename + '.' + extension;
+      elem.download = filename;
       document.body.appendChild(elem);
       elem.click();        
       document.body.removeChild(elem);
@@ -105,6 +116,7 @@ function coprime(a, b) {
 
 export {
   convertArrayBufferToString,
+  convertArrayBufferToBinaryString,
   readFileAsArrayBuffer,
   readFileAsString,
   readTwoFiles,

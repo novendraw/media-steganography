@@ -8,10 +8,11 @@ import {
 } from 'react-bootstrap';
 
 import {
+  convertArrayBufferToBinaryString,
   readFileAsArrayBuffer,
   readTwoFiles,
   readFileURL,
-  downloadFile,
+  downloadBinaryFile,
   mod,
 } from './helper';
 
@@ -20,17 +21,20 @@ export default class Image extends React.PureComponent {
     super(props);
     this.action = null;
     this.state = {
-      sourceImg: null,
+      fileName: "result.png",
       sourceImgURL: null,
-      keyImg: null,
-      keyImgURL: null,
-      resultImg: null,
+      resultImgArray: null,
+      resultImgURL: null,
       useEncryption: true,
     };
   }
 
   toggleEncryption = (event) => {
     this.setState({useEncryption: !event.target.checked});
+  }
+
+  saveFileName = (event) => {
+    this.setState({fileName: event.target.value});
   }
 
   getImageData(imageURL) {
@@ -46,19 +50,6 @@ export default class Image extends React.PureComponent {
   }
 
   getRGBAString(imageData, encryptionKey) {
-    // let result = {};
-    // result.red = [];
-    // result.green = [];
-    // result.blue = [];
-    // result.alpha = [];
-
-    // for (let i = 0; i < imageData.data.length; i+=4) {
-    //   result.red.push(imageData.data[i].toString(2));
-    //   result.green.push(imageData.data[i+1].toString(2));
-    //   result.blue.push(imageData.data[i+2].toString(2));
-    //   result.alpha.push(imageData.data[i+3].toString(2));
-    // }
-
     const { useEncryption } = this.state;
 
     let result = "";
@@ -75,31 +66,63 @@ export default class Image extends React.PureComponent {
     return result;
   }
 
-  lsb(sourceImgURL, keyImgURL, encryptionKey, hidingOption) {
-    let sourceImgData = this.getImageData(sourceImgURL);
-    let keyImgData = this.getImageData(keyImgURL);
-    let sourceLength = sourceImgData.data.length;
-    let keyLength = keyImgData.data.length;
-    if (sourceLength / 8 >= keyLength) {
-      let keyString = this.getRGBAString(keyImgData, encryptionKey);
-      let result = [];
-      for (let i = 0; i < sourceLength; i++) {
-        let color = sourceImgData.data[i].toString(2);
-        if (hidingOption === "sequence") {
-          if (i < keyLength * 8) {
-            color = color.substr(0, color.length-1) + keyString[i];
-          } else {
-          }
-        } else {
-          //hidingOption === "random"
-        }
-        
-        result.push(color);
-      }
-      return result;
-    } else {
-      alert("LSB not possible with key image size");
+  convertFileNameToBinary(fileName) {
+    let result = "";
+    for (let i = 0; i < fileName.length; i++) {
+      let binary = fileName.charCodeAt(i).toString(2);
+      binary = "00000000".substr(binary.length) + binary;
+      result += binary;
     }
+    let remainderLength = 2016-result.length;
+    let header = "0";
+    header = header.repeat(remainderLength);
+    result = header + result;
+    return result;
+  }
+  
+
+  LSBEmbed(sourceImgURL, fileToHide, encryptionKey, hidingOption) {
+    let sourceImgData = this.getImageData(sourceImgURL);
+    let sourceLength = sourceImgData.data.length;
+    let fileData = readFileAsArrayBuffer(fileToHide);
+    fileData.then(fileArray => {
+      let buffer = new Uint8Array(fileArray);
+      let bufferLength = buffer.length;
+      
+      if (sourceLength / 8 >= (bufferLength + 256*8)) { //64 bytes header for filesize and filename
+        //Convert fileName to bits
+        const { fileName } = this.state;
+        let binaryFileName = this.convertFileNameToBinary(fileName);
+        
+        //Convert file size to bits
+        let fileSize = bufferLength.toString(2);
+        fileSize = "00000000000000000000000000000000".substr(fileSize.length) + fileSize;
+
+        let bufferString = convertArrayBufferToBinaryString(buffer);
+        let result = [];
+        for (let i = 0; i < sourceLength; i++) {
+          let color = sourceImgData.data[i].toString(2);
+          if (hidingOption === "sequence") {
+            if (i < 2016) { //256*8-32
+              color = color.substr(0, color.length-1) + binaryFileName[i];
+            } else if (i < 2048) {
+              color = color.substr(0, color.length-1) + fileSize[i-2016];
+            } else {
+              if (i < 2048 + bufferLength * 8) {
+                color = color.substr(0, color.length-1) + bufferString[i-2048];
+              }
+            }
+          } else {
+            //hidingOption === "random"
+          }
+          result.push(color);
+        }
+        result = this.convertToDecimalArray(result);
+        this.renderResultImg(sourceImgURL, result);
+      } else {
+        alert("Source capacity is not enough");
+      }
+    });
   }
 
   convertToDecimalArray(binaryArray) {
@@ -110,93 +133,102 @@ export default class Image extends React.PureComponent {
     return result;
   }
 
-  getLSB(sourceImgURL, keyImgURL, hidingOption) {
+  convertToString(binaryString) {
+    let string = binaryString.replace(/^0+/, '');
+    let modRemainder = string.length % 8;
+    if (modRemainder !== 0) {
+      let header = "0";
+      header = header.repeat(8 - modRemainder);
+      string = header + string;
+    }
+
+    let result = "";
+    while (string.length > 0) {
+      let substr = string.substr(0, 8);
+      result += String.fromCharCode(parseInt(substr, 2));
+      string = string.substring(8);
+    }
+
+    return result;
+  }
+
+  getLSB(sourceImgURL, encryptionKey, hidingOption) {
     let sourceImgData = this.getImageData(sourceImgURL);
-    let keyImgData = this.getImageData(keyImgURL);
     let sourceLength = sourceImgData.data.length;
-    let keyLength = keyImgData.data.length;
     let result = [];
     let temp = "";
-    for (let i = 0; i < keyLength * 8 && i < sourceLength; i++) {
+    for (let i = 0; i < 2048 && i < sourceLength; i++) {
       if (hidingOption === "sequence") {
         let color = sourceImgData.data[i].toString(2);
         let lsb = color[color.length-1];
-        if (temp.length < 8) {
-          if (i === keyLength-1) {
-            result.push(temp);
-          } else {
-            temp += lsb;
-          }
-        } else {
-          result.push(temp);
-          temp = lsb;
-        }
+        temp += lsb;
       } else {
-        // If hidingOption === "random"
       }
     }
-    return result;
+    
+    let fileName = temp.substr(0, 2016);
+    fileName = this.convertToString(fileName);
+
+    let fileSize = temp.substr(2016, 2048);
+    fileSize = parseInt(fileSize, 2);
+
+    temp = "";
+    for (let i = 0; i < fileSize * 8; i++) {
+      let color = sourceImgData.data[2048+i].toString(2);
+      let lsb = color[color.length-1];
+      if (temp.length < 8) {
+        if (i === fileSize-1) {
+          result.push(temp);
+        } else {
+          temp += lsb;
+        }
+      } else {
+        result.push(temp);
+        temp = lsb;
+      }
+    }
+    let resultArray = this.convertToDecimalArray(result); 
+    downloadBinaryFile(fileName, resultArray);
   }
 
   handleSubmit = (event) => {
     event.preventDefault();
+    const { sourceImgURL } = this.state;
     let sourceImg = event.target.inputSourceImg;
-    let keyImg = event.target.inputKeyImg;
+    let fileToHide = event.target.inputFile;
+    let methodOption = event.target.methodOption.value;
+    let encryptionKey = event.target.encryptKey.value;
+    let hidingOption = event.target.hidingOption.value;
 
-    if (sourceImg.files.length > 0 && keyImg.files.length > 0) {
-      const { sourceImg, sourceImgURL, keyImg, keyImgURL } = this.state;
-      let methodOption = event.target.methodOption.value;
-      let encryptionKey = event.target.encryptKey.value;
-      let hidingOption = event.target.hidingOption.value;
-      if (methodOption === "lsb") {
-        if (this.action === "hide") {
-          let resultArray = this.lsb(sourceImgURL, keyImgURL, encryptionKey, hidingOption);
-          resultArray = this.convertToDecimalArray(resultArray);
-          let resultImg = this.renderResultImg(sourceImgURL, resultArray);
+    if (methodOption === "lsb") {
+      if (this.action === "hide") {
+        if (sourceImg.files.length > 0 && fileToHide.files.length > 0) {
+          this.setState({fileName: fileToHide.files[0].name});
+          this.LSBEmbed(sourceImgURL, fileToHide.files[0], encryptionKey, hidingOption);
         } else {
-          let resultArray = this.getLSB(sourceImgURL, keyImgURL, hidingOption);
-          resultArray = this.convertToDecimalArray(resultArray);
-          console.log(resultArray);
-          let resultImg = this.renderResultImg(keyImgURL, resultArray);
+          alert("Source Media and File to Hide Must Exist!");
         }
-      } else {
-        //BCPS
+      } else { //this.action === "extract"
+        if (sourceImg.files.length > 0) {
+          let resultArray = this.getLSB(sourceImgURL, encryptionKey, hidingOption);
+        } else {
+          alert("Source Media to Extract Must Exist!");
+        }
       }
-      
-      // let readResult = readTwoFiles(sourceImg, keyImg);
-      // readResult.then(([sourceArray, keyArray]) => {
-      //   let sourceBuffer = new Uint8Array(sourceArray);
-      //   let keyBuffer = new Uint8Array(keyArray);
-      //   if (this.action === "encrypt") {
-      //     //CALL ENCRYPTION WITH NECESSARY PARAMS
-      //     this.encrypt(sourceBuffer, keyBuffer);
-      //   } else {
-      //     //CALL DECRYPTIOn WITH NECESSARY PARAMS
-      //     this.decrypt(sourceBuffer, keyBuffer);
-      //   }
-      // });
     } else {
-      alert("Source Media and Key Media must Exist!");
+      //BCPS
     }
   }
 
-  renderImg = (file, type) => {
+  renderImg = (file) => {
     if (file.length > 0) {
       let fileData = file[0];
       let fileURL = readFileURL(fileData);
       fileURL.then(url => {
-        if (type === "source") {
-          this.setState({sourceImg: fileData, sourceImgURL: url});
-        } else {
-          this.setState({keyImg: fileData, keyImgURL: url});
-        }
+        this.setState({sourceImgURL: url});
       });
     } else {
-      if (type === "source") {
-        this.setState({sourceImg: null, sourceImgURL: null});
-      } else {
-        this.setState({keyImg: null, keyImgURL: null});
-      }
+      this.setState({sourceImgURL: null});
     }
   }
 
@@ -217,17 +249,8 @@ export default class Image extends React.PureComponent {
     this.setState({resultImgURL: resultImg.src});
   }
 
-  download(url) {
-    let elem = document.createElement('a');
-    elem.href = url;
-    elem.download = "test.bmp";
-    document.body.appendChild(elem);
-    elem.click();        
-    document.body.removeChild(elem);
-  }
-
   render() {
-    const { sourceImgURL, keyImgURL, resultImg, resultImgURL, useEncryption } = this.state;
+    const { sourceImgURL, resultImgArray, resultImgURL, useEncryption } = this.state;
     return (
       <React.Fragment>
         <Form onSubmit={this.handleSubmit} className="margin-bottom-md">
@@ -240,19 +263,7 @@ export default class Image extends React.PureComponent {
                 <img id="sourceImg" src={sourceImgURL} className="full-height"/>
               </div>
               <Form.Group>
-                <Form.File id="inputSourceImg" label="Upload source image" onChange={(e) => this.renderImg(e.target.files, "source")} accept="image/x-png,image/bmp"/>
-              </Form.Group>
-            </Col>
-
-            <Col xs={4}>
-              <div className="content-center subheadline bold margin-bottom-sm">
-                Media to Hide
-              </div>
-              <div className="content-center full-width image-container margin-bottom-xs">
-                <img id="keyImg" src={keyImgURL} className="full-height"/>
-              </div>
-              <Form.Group>
-                <Form.File id="inputKeyImg" label="Upload key image" onChange={(e) => this.renderImg(e.target.files, "key")}/>
+                <Form.File id="inputSourceImg" label="Upload source image" onChange={(e) => this.renderImg(e.target.files)} accept="image/x-png,image/bmp"/>
               </Form.Group>
             </Col>
 
@@ -263,16 +274,42 @@ export default class Image extends React.PureComponent {
               <div className="content-center full-width image-container margin-bottom-xs">
                 <img id="resultImg" src={resultImgURL} className="full-height"/>
               </div>
-              <Button
-                variant="success"
-                type="button"
-                className="margin-bottom-xs"
-                // onClick={() => downloadFile("result", resultImg)}
-                onClick={() => this.download(resultImgURL)}
-              >
-                {" "}
-                Download Result
-              </Button>
+              <Row>
+                <div>Enter filename with extension</div>
+              </Row>
+              <Row>
+                <Col className="no-indent">
+                  <Form.Group controlId="filenameField">
+                    <Form.Control
+                      type="text"
+                      onChange={(event) => {this.saveFileName(event)}}
+                    />
+                  </Form.Group>
+                </Col>
+                <Col className="no-indent">
+                  <Button
+                    variant="success"
+                    type="button"
+                    className="margin-bottom-xs"
+                    onClick={() => downloadBinaryFile(this.state.fileName, resultImgArray)}
+                  >
+                    {" "}
+                    Download Result
+                  </Button>
+                </Col>
+              </Row>
+            </Col>
+
+            <Col xs={4}>
+              <div className="content-center subheadline bold margin-bottom-xxl">
+                File to Hide
+              </div>
+              <div className="body-text bold margin-bottom-sm">
+                Choose file to hide within source image
+              </div>
+              <Form.Group>
+                <Form.File id="inputFile"/>
+              </Form.Group>
             </Col>
           </Row>
           <Row>
