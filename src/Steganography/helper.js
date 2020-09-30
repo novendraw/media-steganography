@@ -1,3 +1,14 @@
+function getKeys(text) {
+  let result = [];
+
+  for (let i = 0; i < text.length; i++) {
+    let charNum = text.charCodeAt(i);
+    result.push(charNum);
+  }
+
+  return result;
+}
+
 function encodeFile(plainText, key) {
   let cipherText = []
   plainText = new Int8Array(plainText);
@@ -145,6 +156,7 @@ function coprime(a, b) {
 }
 
 export {
+  getKeys,
   encodeFile,
   decodeFile,
   convertArrayBufferToString,
