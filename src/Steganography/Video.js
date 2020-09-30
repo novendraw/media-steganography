@@ -14,6 +14,7 @@ import {
   readFileURL,
   downloadFile,
   mod,
+  convertArrayBufferToString,
 } from './helper';
 
 export default class Video extends React.PureComponent {
@@ -23,44 +24,90 @@ export default class Video extends React.PureComponent {
     this.state = {
       sourceVid: null,
       sourceVidURL: null,
-      keyVid: null,
-      keyVidURL: null,
+      message: null,
+      messageURL: null,
       resultVid: null,
+      seed: null,
     };
   }
 
-  encrypt(plainText, key) {
+  encrypt(plainText, message, frameOption, hidingOption, seed) {
     //ENCRYPTION ALGORITHM
+    // console.log(plainText)
+    // console.log(message)
+    // console.log(frameOption)
+    // console.log(hidingOption)
+    // console.log(seed)
+
+    let cipherText = plainText
+    let pos = 10720
+    let messageLength = message.length
+    for (let i = 0; i < messageLength; i++) {
+      cipherText[pos] = message[i]
+      pos += 8
+    }
+
+    this.setState({ resultVid: cipherText })
+
   }
 
-  decrypt(cipherText, key) {
+  decrypt(cipherText, message) {
     //DECRYPTION ALGORITHM
+    let pos = 10720
+    let messageLength = message.length
+    let outputMessage = new Uint8Array(messageLength)
+    for (let i = 0; i < messageLength; i++) {
+      outputMessage[i] = cipherText[pos]
+      pos += 8
+    }
+
+    outputMessage = outputMessage.buffer
+
+    this.setState({ resultVid: outputMessage })
   }
 
   handleSubmit = (event) => {
     event.preventDefault();
     let sourceVid = event.target.inputSourceVid;
-    let keyVid = event.target.inputKeyVid;
+    let message = event.target.inputMessage;
 
-    if (sourceVid.files.length > 0 && keyVid.files.length > 0) {
-      const { sourceVid, keyVid } = this.state;
-      let methodOption = event.target.methodOption.value;
+    if (sourceVid.files.length > 0 && message.files.length > 0) {
+      const { sourceVid, message } = this.state;
+      let frameOption = event.target.frameOption.value;
       let useEncryption = event.target.useEncryption.checked;
       let hidingOption = event.target.hidingOption.value;
-      let readResult = readTwoFiles(sourceVid, keyVid);
-      readResult.then(([sourceArray, keyArray]) => {
+      let readResult = readTwoFiles(sourceVid, message);
+      var seed;
+      readResult.then(([sourceArray, messageArray]) => {
         let sourceBuffer = new Uint8Array(sourceArray);
-        let keyBuffer = new Uint8Array(keyArray);
+        let messageBuffer = new Uint8Array(messageArray);
         if (this.action === "encrypt") {
           //CALL ENCRYPTION WITH NECESSARY PARAMS
-          this.encrypt(sourceBuffer, keyBuffer);
+          if (useEncryption) {
+            seed = prompt("Enter your random seed for encryption:");
+            if (seed == null || seed == "") {
+              alert("Encryption cancelled");
+            }
+            else if (isNaN(parseInt(seed, 10))) {
+              alert("Encryption cancelled. Seed should only be numbers")
+            }
+            else {
+              this.setState({ seed: parseInt(seed, 10)})
+              this.encrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, parseInt(seed, 10));
+            }
+          }
+          else {
+            seed = "-1"
+            this.setState({ seed: parseInt(seed, 10) })
+            this.encrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, parseInt(seed, 10));
+          }
         } else {
           //CALL DECRYPTIOn WITH NECESSARY PARAMS
-          this.decrypt(sourceBuffer, keyBuffer);
+          this.decrypt(sourceBuffer, messageBuffer);
         }
       });
     } else {
-      alert("Source Media and Key Media must Exist!");
+      alert("Source Media and Message Media must Exist!");
     }
   }
 
@@ -71,8 +118,8 @@ export default class Video extends React.PureComponent {
       fileURL.then(url => {
         if (type === "source") {
           this.setState({sourceVid: fileData, sourceVidURL: url});
-        } else if (type === "key") {
-          this.setState({keyVid: fileData, keyVidURL: url});
+        } else if (type === "message") {
+          this.setState({message: fileData, messageURL: url});
         } else {
           this.setState({resultVidURL: url});
         }
@@ -80,8 +127,8 @@ export default class Video extends React.PureComponent {
     } else {
       if (type === "source") {
         this.setState({sourceVid: null, sourceVidURL: null});
-      } else if (type === "key") {
-        this.setState({keyVid: null, keyVidURL: null});
+      } else if (type === "message") {
+        this.setState({message: null, messageURL: null});
       } else {
         this.setState({resultVid: null, resultVidURL: null});
       }
@@ -89,7 +136,7 @@ export default class Video extends React.PureComponent {
   }
 
   render() {
-    const { sourceVidURL, keyVidURL, resultVid, resultVidURL } = this.state;
+    const { sourceVidURL, messageURL, resultVid, resultVidURL } = this.state;
     return (
       <React.Fragment>
         <Form onSubmit={this.handleSubmit} className="margin-bottom-md">
@@ -110,10 +157,10 @@ export default class Video extends React.PureComponent {
 
             <Col xs={4}>
               <div className="content-center subheadline bold margin-bottom-sm">
-                Key Media
+                Secret Message Media
               </div>
               <Form.Group>
-                <Form.File id="inputKeyVid" label="Upload key file" onChange={(e) => this.renderVid(e.target.files, "key")}/>
+                <Form.File id="inputMessage" label="Upload message file" onChange={(e) => this.renderVid(e.target.files, "message")}/>
               </Form.Group>
             </Col>
 
@@ -139,10 +186,18 @@ export default class Video extends React.PureComponent {
           </Row>
           <Row>
             <Col>
-              <Form.Group controlId="methodOption">
-                <Form.Label>Method</Form.Label>
+              <Form.Group controlId="frameOption">
+                <Form.Label>Frame Option</Form.Label>
                 <Form.Control as="select">
-                  <option value="lsb">LSB</option>
+                  <option value="sequence">Sequential</option>
+                  <option value="random">Random</option>
+                </Form.Control>
+              </Form.Group>
+              <Form.Group controlId="hidingOption">
+                <Form.Label>Hiding Option</Form.Label>
+                <Form.Control as="select">
+                  <option value="sequence">Sequential</option>
+                  <option value="random">Random</option>
                 </Form.Control>
               </Form.Group>
               <Form.Group controlId="useEncryption">
@@ -150,12 +205,6 @@ export default class Video extends React.PureComponent {
                   type="checkbox"
                   label="Use Encryption"
                 />
-              </Form.Group>
-              <Form.Group controlId="hidingOption">
-                <Form.Label>Hiding Option</Form.Label>
-                <Form.Control as="select">
-                  <option value="random">Random</option>
-                </Form.Control>
               </Form.Group>
               <Button
                 variant="primary"
