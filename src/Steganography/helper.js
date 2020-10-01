@@ -104,7 +104,6 @@ function downloadFile(filename, data) {
 }
 
 function downloadBinaryFile(filename, buffer) {
-  console.log(filename);
   if (buffer) {
     let blob = new Blob([buffer], {type: 'application/octet-stream'});
     if (window.navigator.msSaveOrOpenBlob) {

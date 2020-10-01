@@ -21,9 +21,10 @@ export default class Image extends React.PureComponent {
     super(props);
     this.action = null;
     this.state = {
-      fileName: "result.png",
+      fileName: "hidden.png",
+      resultFileName: "result.png",
       sourceImgURL: null,
-      resultImgArray: null,
+      resultCanvas: null,
       resultImgURL: null,
       useEncryption: true,
     };
@@ -34,7 +35,7 @@ export default class Image extends React.PureComponent {
   }
 
   saveFileName = (event) => {
-    this.setState({fileName: event.target.value});
+    this.setState({resultFileName: event.target.value});
   }
 
   getImageData(imageURL) {
@@ -80,55 +81,10 @@ export default class Image extends React.PureComponent {
     return result;
   }
   
-
-  LSBEmbed(sourceImgURL, fileToHide, encryptionKey, hidingOption) {
-    let sourceImgData = this.getImageData(sourceImgURL);
-    let sourceLength = sourceImgData.data.length;
-    let fileData = readFileAsArrayBuffer(fileToHide);
-    fileData.then(fileArray => {
-      let buffer = new Uint8Array(fileArray);
-      let bufferLength = buffer.length;
-      
-      if (sourceLength / 8 >= (bufferLength + 256*8)) { //64 bytes header for filesize and filename
-        //Convert fileName to bits
-        const { fileName } = this.state;
-        let binaryFileName = this.convertFileNameToBinary(fileName);
-        
-        //Convert file size to bits
-        let fileSize = bufferLength.toString(2);
-        fileSize = "00000000000000000000000000000000".substr(fileSize.length) + fileSize;
-
-        let bufferString = convertArrayBufferToBinaryString(buffer);
-        let result = [];
-        for (let i = 0; i < sourceLength; i++) {
-          let color = sourceImgData.data[i].toString(2);
-          if (hidingOption === "sequence") {
-            if (i < 2016) { //256*8-32
-              color = color.substr(0, color.length-1) + binaryFileName[i];
-            } else if (i < 2048) {
-              color = color.substr(0, color.length-1) + fileSize[i-2016];
-            } else {
-              if (i < 2048 + bufferLength * 8) {
-                color = color.substr(0, color.length-1) + bufferString[i-2048];
-              }
-            }
-          } else {
-            //hidingOption === "random"
-          }
-          result.push(color);
-        }
-        result = this.convertToDecimalArray(result);
-        this.renderResultImg(sourceImgURL, result);
-      } else {
-        alert("Source capacity is not enough");
-      }
-    });
-  }
-
   convertToDecimalArray(binaryArray) {
-    let result = [];
+    let result = new Uint8Array(binaryArray.length);
     for (let i = 0; i < binaryArray.length; i++) {
-      result.push(parseInt(binaryArray[i], 2));
+      result[i] = parseInt(binaryArray[i], 2);
     }
     return result;
   }
@@ -152,10 +108,56 @@ export default class Image extends React.PureComponent {
     return result;
   }
 
+  LSBEmbed(sourceImgURL, fileToHide, encryptionKey, hidingOption) {
+    let sourceImgData = this.getImageData(sourceImgURL);
+    let sourceLength = sourceImgData.data.length;
+    let fileData = readFileAsArrayBuffer(fileToHide);
+    fileData.then(fileArray => {
+      let buffer = new Uint8Array(fileArray);
+      let bufferLength = buffer.length;
+      
+      if (sourceLength / 8 >= (bufferLength + 256*8)) { //64 bytes header for filesize and filename
+        //Convert fileName to bits
+        const { fileName } = this.state;
+        let binaryFileName = this.convertFileNameToBinary(fileName);
+        
+        //Convert file size to bits
+        let fileSize = bufferLength.toString(2);
+        fileSize = "00000000000000000000000000000000".substr(fileSize.length) + fileSize;
+
+        let bufferString = convertArrayBufferToBinaryString(buffer);
+
+        this.setState({buffer: bufferString});
+        let result = [];
+        for (let i = 0; i < sourceLength; i++) {
+          let color = sourceImgData.data[i].toString(2);
+          if (hidingOption === "sequence") {
+            if (i < 2016) { //256*8-32
+              color = color.substr(0, color.length-1) + binaryFileName[i];
+            } else if (i < 2048) {
+              color = color.substr(0, color.length-1) + fileSize[i-2016];
+            } else {
+              if (i < 2048 + bufferLength * 8) {
+                color = color.substr(0, color.length-1) + bufferString[i-2048];
+              }
+            }
+          } else {
+            //hidingOption === "random"
+          }
+          result.push(color);
+        }
+
+        result = this.convertToDecimalArray(result);
+        this.renderResultImg(sourceImgURL, result);
+      } else {
+        alert("Source capacity is not enough");
+      }
+    });
+  }
+
   getLSB(sourceImgURL, encryptionKey, hidingOption) {
     let sourceImgData = this.getImageData(sourceImgURL);
     let sourceLength = sourceImgData.data.length;
-    let result = [];
     let temp = "";
     for (let i = 0; i < 2048 && i < sourceLength; i++) {
       if (hidingOption === "sequence") {
@@ -172,12 +174,14 @@ export default class Image extends React.PureComponent {
     let fileSize = temp.substr(2016, 2048);
     fileSize = parseInt(fileSize, 2);
 
+    let result = [];
     temp = "";
     for (let i = 0; i < fileSize * 8; i++) {
       let color = sourceImgData.data[2048+i].toString(2);
       let lsb = color[color.length-1];
       if (temp.length < 8) {
         if (i === fileSize-1) {
+          temp = "00000000".substr(temp.length) + temp;
           result.push(temp);
         } else {
           temp += lsb;
@@ -187,8 +191,46 @@ export default class Image extends React.PureComponent {
         temp = lsb;
       }
     }
+
     let resultArray = this.convertToDecimalArray(result); 
     downloadBinaryFile(fileName, resultArray);
+  }
+
+  renderImg = (file) => {
+    if (file.length > 0) {
+      let fileData = file[0];
+      let fileURL = readFileURL(fileData);
+      fileURL.then(url => {
+        this.setState({sourceImgURL: url});
+      });
+    } else {
+      this.setState({sourceImgURL: null});
+    }
+  }
+
+  renderResultImg(sourceImgURL, steganoArray) {
+    let canvas = document.createElement('canvas');
+    let context = canvas.getContext('2d');
+    let image = document.createElement('img');
+    image.src = sourceImgURL;
+    canvas.width = image.width;
+    canvas.height = image.height;
+    let steganoClampedArray = new Uint8ClampedArray(steganoArray);
+    let steganoImgData = new ImageData(steganoClampedArray, image.width, image.height);
+
+    context.putImageData(steganoImgData, 0, 0);
+    let resultImg = new Image();
+    resultImg.src = canvas.toDataURL();
+    this.setState({resultImgURL: resultImg.src, resultCanvas: canvas});
+  }
+
+  downloadFromCanvas(fileName, canvas) {
+    let link = document.createElement('a');
+    link.download = fileName;
+    canvas.toBlob(function(blob) {
+      link.href = URL.createObjectURL(blob);
+      link.click();
+    }, 'application/octet-stream');
   }
 
   handleSubmit = (event) => {
@@ -220,37 +262,8 @@ export default class Image extends React.PureComponent {
     }
   }
 
-  renderImg = (file) => {
-    if (file.length > 0) {
-      let fileData = file[0];
-      let fileURL = readFileURL(fileData);
-      fileURL.then(url => {
-        this.setState({sourceImgURL: url});
-      });
-    } else {
-      this.setState({sourceImgURL: null});
-    }
-  }
-
-  renderResultImg(sourceImgURL, steganoArray) {
-    let canvas = document.createElement('canvas');
-    let context = canvas.getContext('2d');
-    let image = document.createElement('img');
-    image.src = sourceImgURL;
-    canvas.width = image.width;
-    canvas.height = image.height;
-
-    let steganoClampedArray = new Uint8ClampedArray(steganoArray);
-    let steganoImgData = new ImageData(steganoClampedArray, image.width, image.height);
-
-    context.putImageData(steganoImgData, 0, 0);
-    let resultImg = new Image();
-    resultImg.src = canvas.toDataURL();
-    this.setState({resultImgURL: resultImg.src});
-  }
-
   render() {
-    const { sourceImgURL, resultImgArray, resultImgURL, useEncryption } = this.state;
+    const { sourceImgURL, resultCanvas, resultImgURL, useEncryption } = this.state;
     return (
       <React.Fragment>
         <Form onSubmit={this.handleSubmit} className="margin-bottom-md">
@@ -264,6 +277,18 @@ export default class Image extends React.PureComponent {
               </div>
               <Form.Group>
                 <Form.File id="inputSourceImg" label="Upload source image" onChange={(e) => this.renderImg(e.target.files)} accept="image/x-png,image/bmp"/>
+              </Form.Group>
+            </Col>
+
+            <Col xs={4}>
+              <div className="content-center subheadline bold margin-bottom-xxl">
+                File to Hide
+              </div>
+              <div className="body-text bold margin-bottom-sm">
+                Choose file to hide within source image
+              </div>
+              <Form.Group>
+                <Form.File id="inputFile"/>
               </Form.Group>
             </Col>
 
@@ -291,7 +316,7 @@ export default class Image extends React.PureComponent {
                     variant="success"
                     type="button"
                     className="margin-bottom-xs"
-                    onClick={() => downloadBinaryFile(this.state.fileName, resultImgArray)}
+                    onClick={() => this.downloadFromCanvas(this.state.resultFileName, resultCanvas)}
                   >
                     {" "}
                     Download Result
@@ -300,18 +325,8 @@ export default class Image extends React.PureComponent {
               </Row>
             </Col>
 
-            <Col xs={4}>
-              <div className="content-center subheadline bold margin-bottom-xxl">
-                File to Hide
-              </div>
-              <div className="body-text bold margin-bottom-sm">
-                Choose file to hide within source image
-              </div>
-              <Form.Group>
-                <Form.File id="inputFile"/>
-              </Form.Group>
-            </Col>
           </Row>
+
           <Row>
             <Col>
               <Form.Group controlId="methodOption">
