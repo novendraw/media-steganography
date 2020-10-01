@@ -115,6 +115,7 @@ export default class Image extends React.PureComponent {
     fileData.then(fileArray => {
       let buffer = new Uint8Array(fileArray);
       let bufferLength = buffer.length;
+      console.log("buffer length: ", bufferLength);
       
       if (sourceLength / 8 >= (bufferLength + 256*8)) { //64 bytes header for filesize and filename
         //Convert fileName to bits
@@ -126,6 +127,7 @@ export default class Image extends React.PureComponent {
         fileSize = "00000000000000000000000000000000".substr(fileSize.length) + fileSize;
 
         let bufferString = convertArrayBufferToBinaryString(buffer);
+        console.log("bufferString length: ", bufferString.length);
 
         this.setState({buffer: bufferString});
         let result = [];
@@ -139,6 +141,7 @@ export default class Image extends React.PureComponent {
             } else {
               if (i < 2048 + bufferLength * 8) {
                 color = color.substr(0, color.length-1) + bufferString[i-2048];
+              } else {
               }
             }
           } else {
@@ -180,7 +183,7 @@ export default class Image extends React.PureComponent {
       let color = sourceImgData.data[2048+i].toString(2);
       let lsb = color[color.length-1];
       if (temp.length < 8) {
-        if (i === fileSize-1) {
+        if (i === fileSize*8-1) {
           temp = "00000000".substr(temp.length) + temp;
           result.push(temp);
         } else {
