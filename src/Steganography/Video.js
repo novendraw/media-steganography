@@ -190,11 +190,14 @@ export default class Video extends React.PureComponent {
             </Col>
 
             <Col xs={4}>
-              <div className="content-center subheadline bold margin-bottom-sm">
+              <div className="content-center subheadline bold margin-bottom-xxl">
                 Secret Message Media
               </div>
+              <div className="body-text bold margin-bottom-sm">
+                Choose file to hide within source image
+              </div>
               <Form.Group>
-                <Form.File id="inputMessage" label="Upload message file" onChange={(e) => this.renderVid(e.target.files, "message")}/>
+                <Form.File id="inputMessage" onChange={(e) => this.renderVid(e.target.files, "message")}/>
               </Form.Group>
             </Col>
 
