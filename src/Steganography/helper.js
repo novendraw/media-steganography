@@ -10,30 +10,23 @@ function getKeys(text) {
 }
 
 function encodeFile(plainText, key) {
-  let cipherText = []
-  plainText = new Int8Array(plainText);
+  let cipherText = new Uint8Array(plainText.length)
 
   let keyCodes = getKeys(key);
-  console.log(plainText);
   for (let i = 0; i < plainText.length; i++) {
     let charNum = plainText[i];
     let currentKey = keyCodes[i % keyCodes.length];
 
     charNum = (((charNum + currentKey) % 256) + 256) % 256;
-    cipherText.push(charNum);
+    cipherText[i] = charNum;
   }
 
-  let int8cipherText = new Int8Array(cipherText);
-
-  console.log(int8cipherText)
-
-  return int8cipherText;
+  return cipherText;
 }
 
 /* Decoding */
 function decodeFile(cipherText, key) {
-  let plainText = [];
-  cipherText = new Int8Array(cipherText);
+  let plainText = new Uint8Array(cipherText.length);
 
   let keyCodes = getKeys(key);
 
@@ -42,12 +35,10 @@ function decodeFile(cipherText, key) {
     let currentKey = keyCodes[i % keyCodes.length];
 
     charNum = (((charNum - currentKey) % 256) + 256) % 256;
-    plainText.push(charNum);
+    plainText[i] = charNum;
   }
 
-  let int8plainText = new Int8Array(plainText);
-
-  return int8plainText;
+  return plainText;
 }
 
 function convertArrayBufferToString(array) {

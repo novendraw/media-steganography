@@ -15,7 +15,13 @@ import {
   downloadFile,
   mod,
   convertArrayBufferToString,
+  encodeFile,
+  decodeFile,
 } from './helper';
+
+import { 
+  RIFFFile
+} from 'riff-file';
 
 export default class Video extends React.PureComponent {
   constructor(props) {
@@ -31,17 +37,19 @@ export default class Video extends React.PureComponent {
     };
   }
 
-  encrypt(plainText, message, frameOption, hidingOption, seed) {
+  encrypt(plainText, message, frameOption, hidingOption, key, seed) {
     //ENCRYPTION ALGORITHM
-    // console.log(plainText)
-    // console.log(message)
-    // console.log(frameOption)
-    // console.log(hidingOption)
-    // console.log(seed)
-
+    let riff = new RIFFFile();
+    riff.setSignature(plainText)
+    console.log(riff.signature)
+    
     let cipherText = plainText
     let pos = 10720
     let messageLength = message.length
+    if (key !== "-1") {
+      message = encodeFile(message, key)
+    }
+
     for (let i = 0; i < messageLength; i++) {
       cipherText[pos] = message[i]
       pos += 8
@@ -51,7 +59,7 @@ export default class Video extends React.PureComponent {
 
   }
 
-  decrypt(cipherText, message) {
+  decrypt(cipherText, message, key) {
     //DECRYPTION ALGORITHM
     let pos = 10720
     let messageLength = message.length
@@ -59,6 +67,9 @@ export default class Video extends React.PureComponent {
     for (let i = 0; i < messageLength; i++) {
       outputMessage[i] = cipherText[pos]
       pos += 8
+    }
+    if (key !== "-1") {
+      outputMessage = decodeFile(outputMessage, key)
     }
 
     outputMessage = outputMessage.buffer
@@ -78,32 +89,55 @@ export default class Video extends React.PureComponent {
       let hidingOption = event.target.hidingOption.value;
       let readResult = readTwoFiles(sourceVid, message);
       var seed;
+      let key;
       readResult.then(([sourceArray, messageArray]) => {
         let sourceBuffer = new Uint8Array(sourceArray);
         let messageBuffer = new Uint8Array(messageArray);
         if (this.action === "encrypt") {
           //CALL ENCRYPTION WITH NECESSARY PARAMS
           if (useEncryption) {
-            seed = prompt("Enter your random seed for encryption:");
+            key = prompt("Enter your key for Encryption:");
+            if (key == null || key == "") {
+              alert("Encryption cancelled");
+              return;
+            }
+          }
+          else {
+            key = "-1";
+          }
+          if (frameOption === 'random' || hidingOption === 'random') {
+            seed = prompt("Enter your random seed:");
             if (seed == null || seed == "") {
               alert("Encryption cancelled");
+              return;
             }
             else if (isNaN(parseInt(seed, 10))) {
-              alert("Encryption cancelled. Seed should only be numbers")
+              alert("Encryption cancelled. Seed should only be numbers");
+              return;
             }
             else {
               this.setState({ seed: parseInt(seed, 10)})
-              this.encrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, parseInt(seed, 10));
+              this.encrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, key, parseInt(seed, 10));
             }
           }
           else {
             seed = "-1"
             this.setState({ seed: parseInt(seed, 10) })
-            this.encrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, parseInt(seed, 10));
+            this.encrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, key, parseInt(seed, 10));
           }
         } else {
           //CALL DECRYPTIOn WITH NECESSARY PARAMS
-          this.decrypt(sourceBuffer, messageBuffer);
+          if (useEncryption) {
+            key = prompt("Enter your key for Decryption:");
+            if (key == null || key == "") {
+              alert("Decryption cancelled");
+              return;
+            }
+          }
+          else {
+            key = "-1";
+          }
+          this.decrypt(sourceBuffer, messageBuffer, key);
         }
       });
     } else {
@@ -151,7 +185,7 @@ export default class Video extends React.PureComponent {
                 </ResponsiveEmbed>
               </div>
               <Form.Group>
-                <Form.File id="inputSourceVid" label="Upload source video" onChange={(e) => this.renderVid(e.target.files, "source")}/>
+                <Form.File id="inputSourceVid" label="Upload source video" onChange={(e) => this.renderVid(e.target.files, "source")} accept="video/avi"/>
               </Form.Group>
             </Col>
 
