@@ -8,12 +8,18 @@ import {
 } from 'react-bootstrap';
 
 import {
+  convertArrayBufferToString,
+  convertStringToArrayBuffer,
   convertArrayBufferToBinaryString,
+  convertBinaryStringToArrayBuffer,
+  convertStringToBinaryString,
+  convertBinaryStringToString,
+  convertBinaryArrayToArrayBuffer,
   readFileAsArrayBuffer,
-  readTwoFiles,
   readFileURL,
+  encodeFile,
+  decodeFile,
   downloadBinaryFile,
-  mod,
 } from './helper';
 
 export default class Image extends React.PureComponent {
@@ -26,12 +32,12 @@ export default class Image extends React.PureComponent {
       sourceImgURL: null,
       resultCanvas: null,
       resultImgURL: null,
-      useEncryption: true,
+      useEncryption: false,
     };
   }
 
   toggleEncryption = (event) => {
-    this.setState({useEncryption: !event.target.checked});
+    this.setState({useEncryption: event.target.checked});
   }
 
   saveFileName = (event) => {
@@ -67,59 +73,40 @@ export default class Image extends React.PureComponent {
     return result;
   }
 
-  convertFileNameToBinary(fileName) {
-    let result = "";
-    for (let i = 0; i < fileName.length; i++) {
-      let binary = fileName.charCodeAt(i).toString(2);
-      binary = "00000000".substr(binary.length) + binary;
-      result += binary;
-    }
-    let remainderLength = 2016-result.length;
-    let header = "0";
-    header = header.repeat(remainderLength);
-    result = header + result;
-    return result;
-  }
-  
-  convertToDecimalArray(binaryArray) {
-    let result = new Uint8Array(binaryArray.length);
-    for (let i = 0; i < binaryArray.length; i++) {
-      result[i] = parseInt(binaryArray[i], 2);
-    }
-    return result;
-  }
-
-  convertToString(binaryString) {
-    let string = binaryString.replace(/^0+/, '');
-    let modRemainder = string.length % 8;
-    if (modRemainder !== 0) {
-      let header = "0";
-      header = header.repeat(8 - modRemainder);
-      string = header + string;
-    }
-
-    let result = "";
-    while (string.length > 0) {
-      let substr = string.substr(0, 8);
-      result += String.fromCharCode(parseInt(substr, 2));
-      string = string.substring(8);
-    }
-
-    return result;
-  }
-
   LSBEmbed(sourceImgURL, fileToHide, encryptionKey, hidingOption) {
     let sourceImgData = this.getImageData(sourceImgURL);
     let sourceLength = sourceImgData.data.length;
     let fileData = readFileAsArrayBuffer(fileToHide);
     fileData.then(fileArray => {
       let buffer = new Uint8Array(fileArray);
+
+      const { useEncryption } = this.state;
+      if (useEncryption) {
+        buffer = encodeFile(buffer, encryptionKey);
+      }
+
       let bufferLength = buffer.length;
       
-      if (sourceLength >= (bufferLength*8*8 + 256*8*8)) { //256 bytes header for filesize and filename
+      //total bits for file needed = filesize(byte) * 8 (bit/byte) * 8 (1 bit at every source byte)
+      //total bits for header needed = 256 bytes * 8 (bit/byte) * 8 (1 bit at every source byte)
+      //256 bytes header = 252 bytes filename + 4 bytes filesize
+      if (sourceLength >= (bufferLength*8*8 + 256*8*8)) {
         //Convert fileName to bits
         const { fileName } = this.state;
-        let binaryFileName = this.convertFileNameToBinary(fileName);
+
+        let binaryFileName = null;
+        if (useEncryption) {
+          binaryFileName = convertStringToArrayBuffer(fileName); //get array buffer
+          binaryFileName = encodeFile(binaryFileName, encryptionKey); //encrypt
+          binaryFileName = convertArrayBufferToBinaryString(binaryFileName); //get binary string
+        } else {
+          binaryFileName = convertStringToBinaryString(fileName);
+        }
+
+        let remainderLength = 2016-binaryFileName.length;
+        let header = "0";
+        header = header.repeat(remainderLength);
+        binaryFileName = header + binaryFileName;
         
         //Convert file size to bits
         let fileSize = bufferLength.toString(2);
@@ -148,7 +135,7 @@ export default class Image extends React.PureComponent {
           result.push(color);
         }
 
-        result = this.convertToDecimalArray(result);
+        result = convertBinaryArrayToArrayBuffer(result);
         this.renderResultImg(sourceImgURL, result);
       } else {
         alert("Source capacity is not enough");
@@ -160,6 +147,7 @@ export default class Image extends React.PureComponent {
     let sourceImgData = this.getImageData(sourceImgURL);
     let sourceLength = sourceImgData.data.length;
     let temp = "";
+
     for (let i = 0; i < 2048 && i < sourceLength; i++) {
       if (hidingOption === "sequence") {
         let color = sourceImgData.data[i].toString(2);
@@ -170,7 +158,14 @@ export default class Image extends React.PureComponent {
     }
     
     let fileName = temp.substr(0, 2016);
-    fileName = this.convertToString(fileName);
+    const { useEncryption } = this.state;
+    if (useEncryption) {
+      fileName = convertBinaryStringToArrayBuffer(fileName); 
+      fileName = decodeFile(fileName, encryptionKey);
+      fileName = convertArrayBufferToString(fileName);
+    } else {
+      fileName = convertBinaryStringToString(fileName);
+    }
 
     let fileSize = temp.substr(2016, 2048);
     fileSize = parseInt(fileSize, 2);
@@ -193,7 +188,12 @@ export default class Image extends React.PureComponent {
       }
     }
 
-    let resultArray = this.convertToDecimalArray(result); 
+    let resultArray = convertBinaryArrayToArrayBuffer(result);
+    
+    if (useEncryption) {
+      resultArray = decodeFile(resultArray, encryptionKey);
+    }
+
     downloadBinaryFile(fileName, resultArray);
   }
 
@@ -253,7 +253,7 @@ export default class Image extends React.PureComponent {
         }
       } else { //this.action === "extract"
         if (sourceImg.files.length > 0) {
-          let resultArray = this.getLSB(sourceImgURL, encryptionKey, hidingOption);
+          this.getLSB(sourceImgURL, encryptionKey, hidingOption);
         } else {
           alert("Source Media to Extract Must Exist!");
         }
@@ -345,10 +345,10 @@ export default class Image extends React.PureComponent {
                 />
               </Form.Group>
               <Form.Group controlId="encryptKey">
-                <Form.Label>Full Key</Form.Label>
+                <Form.Label>Encryption Key</Form.Label>
                 <Form.Control
                   type="text"
-                  readOnly={useEncryption}
+                  readOnly={!useEncryption}
                   ref={(ref) => {
                     this.encryptKey = ref;
                   }}
