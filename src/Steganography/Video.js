@@ -23,6 +23,8 @@ import {
   RIFFFile
 } from 'riff-file';
 
+import shuffleSeed from 'shuffle-seed';
+
 export default class Video extends React.PureComponent {
   constructor(props) {
     super(props);
@@ -39,20 +41,64 @@ export default class Video extends React.PureComponent {
 
   encrypt(plainText, message, frameOption, hidingOption, key, seed) {
     //ENCRYPTION ALGORITHM
+    // Read AVI File
     let riff = new RIFFFile();
     riff.setSignature(plainText)
-    console.log(riff.signature)
     
+    // Find subChunks with format 'movi' indicating video data
+    let iData = 0
+    console.log(riff.signature)
+    for (let i = 0; i < riff.signature.subChunks.length; i++) {
+      if (riff.signature.subChunks[i].chunkId === 'LIST' && riff.signature.subChunks[i].format === 'movi') {
+        iData = i
+        break;
+      }
+    }
+    let subChunksLength = riff.signature.subChunks[iData].subChunks.length
+    let frames = []
+
+    // Extract video data from AVI file, and divide it into frames
+    for (let i = 0; i < subChunksLength; i++) {
+      if (riff.signature.subChunks[iData].subChunks[i].chunkId === '00dc') {
+        frames.push(riff.signature.subChunks[iData].subChunks[i])
+      }
+    }
+
+    // Encrypt message if key !== -1
     let cipherText = plainText
-    let pos = 10720
     let messageLength = message.length
     if (key !== "-1") {
       message = encodeFile(message, key)
     }
 
+    // randomize frame sequence if frameOption === 'random'
+    if (frameOption === 'random') {
+      frames = shuffleSeed.shuffle(frames, seed)
+    }
+    console.log(frames)
+    
+    // randomize bit sequence if hidingOption === 'random'
+    message = Array.from(message)
+    if (hidingOption === 'random') {
+      message = shuffleSeed.shuffle(message, seed)
+    }
+    message = Uint8Array.from(message)
+    
+    // LSB algorithm
+    let currentFrame = frames[0]
+    let iFrame = 0
+    let pos = currentFrame.chunkData.start
     for (let i = 0; i < messageLength; i++) {
+      if ((pos + 7) <= currentFrame.chunkData.end) {
+        pos += 7
+      }
+      else {
+        iFrame += 1;
+        currentFrame = frames[iFrame]
+        pos = currentFrame.chunkData.start + 7
+      }
+
       cipherText[pos] = message[i]
-      pos += 8
     }
 
     this.setState({ resultVid: cipherText })
