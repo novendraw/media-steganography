@@ -76,49 +76,129 @@ export default class Video extends React.PureComponent {
       frames = shuffleSeed.shuffle(frames, seed)
     }
     console.log(frames)
-    
-    // randomize bit sequence if hidingOption === 'random'
-    message = Array.from(message)
-    if (hidingOption === 'random') {
-      message = shuffleSeed.shuffle(message, seed)
-    }
-    message = Uint8Array.from(message)
-    
-    // LSB algorithm
-    let currentFrame = frames[0]
-    let iFrame = 0
-    let pos = currentFrame.chunkData.start
-    for (let i = 0; i < messageLength; i++) {
-      if ((pos + 7) <= currentFrame.chunkData.end) {
-        pos += 7
-      }
-      else {
-        iFrame += 1;
-        currentFrame = frames[iFrame]
-        pos = currentFrame.chunkData.start + 7
-      }
 
-      cipherText[pos] = message[i]
+    // convert Uint8Array to binary string
+    let binaryMessage = ''
+    for (let i = 0; i < messageLength; i++) {
+      binaryMessage += ("000000000" + message[i].toString(2)).substr(-8)
+    }
+
+    console.log(binaryMessage)
+    
+    // construct stream of frames used
+    let bytesSize = 0
+    let iFrame = 0
+    let plainTextBytes = []
+    while (bytesSize < binaryMessage.length) {
+      let arrayBytes = []
+      for (let i = frames[iFrame].chunkData.start; i < frames[iFrame].chunkData.end; i++) {
+        arrayBytes.push(i)
+      }
+      if (hidingOption === 'random') {
+        arrayBytes = shuffleSeed.shuffle(arrayBytes, seed)
+      }
+      plainTextBytes = plainTextBytes.concat(arrayBytes)
+      bytesSize += frames[iFrame].chunkSize
+      iFrame += 1
+    }
+
+    // LSB algorithm
+    for (let i = 0; i < binaryMessage.length; i++) {
+      let binaryPlainText = ("000000000" + plainText[plainTextBytes[i]].toString(2)).substr(-8)
+      // console.log(binaryPlainText)
+      // console.log(plainText[plainTextBytes[i]])
+      binaryPlainText = binaryPlainText.substring(0, 7) + binaryMessage[i]
+      let bytesPlainText = parseInt(binaryPlainText, 2)
+
+      cipherText[plainTextBytes[i]] = bytesPlainText
     }
 
     this.setState({ resultVid: cipherText })
 
   }
 
-  decrypt(cipherText, message, key) {
+  decrypt(cipherText, message, frameOption, hidingOption, key, seed) {
     //DECRYPTION ALGORITHM
-    let pos = 10720
-    let messageLength = message.length
-    let outputMessage = new Uint8Array(messageLength)
-    for (let i = 0; i < messageLength; i++) {
-      outputMessage[i] = cipherText[pos]
-      pos += 8
+    // Read AVI File
+    let riff = new RIFFFile();
+    riff.setSignature(cipherText)
+
+    // Find subChunks with format 'movi' indicating video data
+    let iData = 0
+    console.log(riff.signature)
+    for (let i = 0; i < riff.signature.subChunks.length; i++) {
+      if (riff.signature.subChunks[i].chunkId === 'LIST' && riff.signature.subChunks[i].format === 'movi') {
+        iData = i
+        break;
+      }
     }
+    let subChunksLength = riff.signature.subChunks[iData].subChunks.length
+    let frames = []
+
+    // Extract video data from AVI file, and divide it into frames
+    for (let i = 0; i < subChunksLength; i++) {
+      if (riff.signature.subChunks[iData].subChunks[i].chunkId === '00dc') {
+        frames.push(riff.signature.subChunks[iData].subChunks[i])
+      }
+    }
+
+    // Encrypt message if key !== -1
+    let plainText = cipherText
+    let messageLength = message.length
+    
+
+    // randomize frame sequence if frameOption === 'random'
+    if (frameOption === 'random') {
+      frames = shuffleSeed.shuffle(frames, seed)
+    }
+    console.log(frames)
+
+    // convert Uint8Array to binary string
+    let binaryMessage = ''
+    for (let i = 0; i < messageLength; i++) {
+      binaryMessage += ("000000000" + message[i].toString(2)).substr(-8)
+    }
+
+    // construct stream of frames used
+    let bytesSize = 0
+    let iFrame = 0
+    let cipherTextBytes = []
+    while (bytesSize < binaryMessage.length) {
+      let arrayBytes = []
+      for (let i = frames[iFrame].chunkData.start; i < frames[iFrame].chunkData.end; i++) {
+        arrayBytes.push(i)
+      }
+      if (hidingOption === 'random') {
+        arrayBytes = shuffleSeed.shuffle(arrayBytes, seed)
+      }
+      cipherTextBytes = cipherTextBytes.concat(arrayBytes)
+      bytesSize += frames[iFrame].chunkSize
+      iFrame += 1
+    }
+
+    // LSB algorithm
+    let binaryOutputMessage = ''
+    for (let i = 0; i < binaryMessage.length; i++) {
+      let binaryCipherText = ("000000000" + cipherText[cipherTextBytes[i]].toString(2)).substr(-8)
+      // console.log(binaryPlainText)
+      // console.log(plainText[plainTextBytes[i]])
+      binaryOutputMessage += binaryCipherText[7]
+    }
+    console.log(binaryOutputMessage)
+
+    // divide outputMessage by 8
+    binaryOutputMessage = binaryOutputMessage.match(/.{1,8}/g);
+
+    // convert array of binary to array of int
+    let outputMessage = new Uint8Array(binaryOutputMessage.length)
+    for (let i = 0; i < binaryOutputMessage.length; i++) {
+      outputMessage[i] = parseInt(binaryOutputMessage[i], 2)
+    }
+
+    // decode message if previously encoded
     if (key !== "-1") {
       outputMessage = decodeFile(outputMessage, key)
     }
-
-    outputMessage = outputMessage.buffer
 
     this.setState({ resultVid: outputMessage })
   }
@@ -183,7 +263,26 @@ export default class Video extends React.PureComponent {
           else {
             key = "-1";
           }
-          this.decrypt(sourceBuffer, messageBuffer, key);
+          if (frameOption === 'random' || hidingOption === 'random') {
+            seed = prompt("Enter your random seed:");
+            if (seed == null || seed == "") {
+              alert("Decryption cancelled");
+              return;
+            }
+            else if (isNaN(parseInt(seed, 10))) {
+              alert("Decryption cancelled. Seed should only be numbers");
+              return;
+            }
+            else {
+              this.setState({ seed: parseInt(seed, 10) })
+              this.decrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, key, parseInt(seed, 10));
+            }
+          }
+          else {
+            seed = "-1"
+            this.setState({ seed: parseInt(seed, 10) })
+            this.decrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, key, parseInt(seed, 10));
+          }
         }
       });
     } else {
