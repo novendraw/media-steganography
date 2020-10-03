@@ -15,6 +15,8 @@ import {
   convertStringToBinaryString,
   convertBinaryStringToString,
   convertBinaryArrayToArrayBuffer,
+  convertArrayBufferToBitplanesArray,
+  convertBitplanesArrayToArrayBuffer,
   readFileAsArrayBuffer,
   readFileURL,
   encodeFile,
@@ -29,6 +31,14 @@ export default class Image extends React.PureComponent {
     this.state = {
       fileName: "hidden.png",
       resultFileName: "result.png",
+      chessboard: ["0","1","0","1","0","1","0","1",
+                   "1","0","1","0","1","0","1","0",
+                   "0","1","0","1","0","1","0","1",
+                   "1","0","1","0","1","0","1","0",
+                   "0","1","0","1","0","1","0","1",
+                   "1","0","1","0","1","0","1","0",
+                   "0","1","0","1","0","1","0","1",
+                   "1","0","1","0","1","0","1","0"],
       sourceImgURL: null,
       resultCanvas: null,
       resultImgURL: null,
@@ -90,7 +100,7 @@ export default class Image extends React.PureComponent {
       //total bits for file needed = filesize(byte) * 8 (bit/byte) * 8 (1 bit at every source byte)
       //total bits for header needed = 256 bytes * 8 (bit/byte) * 8 (1 bit at every source byte)
       //256 bytes header = 252 bytes filename + 4 bytes filesize
-      if (sourceLength >= (bufferLength*8*8 + 256*8*8)) {
+      if (sourceLength >= (1 + bufferLength*8*8 + 256*8*8)) {
         //Convert fileName to bits
         const { fileName } = this.state;
 
@@ -119,13 +129,15 @@ export default class Image extends React.PureComponent {
         for (let i = 0; i < sourceLength; i++) {
           let color = sourceImgData.data[i].toString(2);
           if (hidingOption === "sequence") {
-            if (i < 2016) { //256*8-32
-              color = color.substr(0, color.length-1) + binaryFileName[i];
-            } else if (i < 2048) {
-              color = color.substr(0, color.length-1) + fileSize[i-2016];
+            if (i < 1) {
+              color = color.substr(0, color.length-1) + "1";
+            } else if (i < 2017) { //1+256*8-32
+              color = color.substr(0, color.length-1) + binaryFileName[i-1];
+            } else if (i < 2049) {
+              color = color.substr(0, color.length-1) + fileSize[i-2017];
             } else {
-              if (i < 2048 + bufferLength * 8) {
-                color = color.substr(0, color.length-1) + bufferString[i-2048];
+              if (i < 2049 + bufferLength * 8) {
+                color = color.substr(0, color.length-1) + bufferString[i-2049];
               } else {
               }
             }
@@ -143,12 +155,20 @@ export default class Image extends React.PureComponent {
     });
   }
 
-  getLSB(sourceImgURL, encryptionKey, hidingOption) {
+  getLSB(sourceImgURL, encryptionKey) {
     let sourceImgData = this.getImageData(sourceImgURL);
     let sourceLength = sourceImgData.data.length;
     let temp = "";
 
-    for (let i = 0; i < 2048 && i < sourceLength; i++) {
+    let hidingOptionColor = sourceImgData.data[0].toString(2);
+    let hidingOption = null;
+    if (hidingOptionColor[hidingOptionColor.length-1] === "1") {
+      hidingOption = "sequence";
+    } else {
+      hidingOption = "random";
+    }
+
+    for (let i = 1; i < 2049 && i < sourceLength; i++) {
       if (hidingOption === "sequence") {
         let color = sourceImgData.data[i].toString(2);
         let lsb = color[color.length-1];
@@ -173,7 +193,7 @@ export default class Image extends React.PureComponent {
     let result = [];
     temp = "";
     for (let i = 0; i < fileSize * 8; i++) {
-      let color = sourceImgData.data[2048+i].toString(2);
+      let color = sourceImgData.data[2049+i].toString(2);
       let lsb = color[color.length-1];
       if (temp.length < 8) {
         if (i === fileSize*8-1) {
@@ -195,6 +215,218 @@ export default class Image extends React.PureComponent {
     }
 
     downloadBinaryFile(fileName, resultArray);
+  }
+
+  calculateComplexity(bitplane) {
+    const length = bitplane.length;
+    let counter = 0;
+    const max = 112;
+    for (let i = 0; i < length; i++) {
+      if (bitplane[i] === "1") {
+        //Check left
+        if (i-1 > 0 && (i-1)%8 !== 7) {
+          if (bitplane[i-1] !== bitplane[i]) counter++;
+        }
+
+        //Check right
+        if (i+1 < length && (i+1)%8 !== 0) {
+          if (bitplane[i+1] !== bitplane[i]) counter++;
+        }
+
+        //Check above
+        if (i-8 > 0) {
+          if (bitplane[i-8] !== bitplane[i]) counter++;
+        }
+
+        //Check below
+        if (i+8 < length) {
+          if (bitplane[i+8] !== bitplane[i]) counter++;
+        } 
+      }
+    }
+    return counter/max;
+  }
+
+  xor(string1, string2) {
+    if (string1 === string2) {
+      return "0"; //white
+    } else {
+      return "1"; //black
+    }
+  }
+
+  convertPBC_CGC(bitplanesArray) {
+    let result = [];
+    let modRemainder = bitplanesArray.length % 8;
+    for (let i = 0; i < bitplanesArray.length; i++) {
+      if (i < bitplanesArray.length-modRemainder) {
+        if (i % 8 === 0) {
+          result.push(bitplanesArray[i]);
+        } else {
+          let bitplane = [];
+          for (let j = 0; j < 64; j++) {
+            bitplane.push(this.xor(bitplanesArray[i-1][j], bitplanesArray[i][j]));
+          }
+          result.push(bitplane);
+        }
+      } else {
+        result.push(bitplanesArray[i]);
+      }
+    }
+
+    return result;
+  }
+
+  convertPBC_CGC(bitplanesArray) {
+    let result = [];
+    let modRemainder = bitplanesArray.length % 8;
+    for (let i = 0; i < bitplanesArray.length; i++) {
+      if (i < bitplanesArray.length-modRemainder) {
+        if (i % 8 === 0) {
+          result.push(bitplanesArray[i]);
+        } else {
+          let bitplane = [];
+          for (let j = 0; j < 64; j++) {
+            bitplane.push(this.xor(bitplanesArray[i-1][j], bitplanesArray[i][j]));
+          }
+          result.push(bitplane);
+        }
+      } else {
+        result.push(bitplanesArray[i]);
+      }
+    }
+
+    return result;
+  }
+
+  conjugate(bitplane) {
+    const { chessboard } = this.state;
+    let result = [];
+    for (let i = 0; i < bitplane.length; i++) {
+      result.push(this.xor(bitplane[i], chessboard[i]));
+    }
+    return result;
+  }
+
+  BPCSEmbed(sourceImgURL, fileToHide, encryptionKey, hidingOption) {
+    let sourceImgData = this.getImageData(sourceImgURL);
+    let fileData = readFileAsArrayBuffer(fileToHide);
+    fileData.then(fileArray => {
+      let dataBuffer = new Uint8Array(fileArray);
+      let buffer = new Uint8Array(dataBuffer.length + 247);
+      
+      const { fileName } = this.state;
+      let fileNameArray = convertStringToArrayBuffer(fileName);
+
+      let bufferSize = convertStringToArrayBuffer(dataBuffer.length.toString());
+
+      if (hidingOption === "sequence") {
+        buffer[0] = 1
+      } else {
+        buffer[0] = 0;
+      }
+
+      for (let i = 236; i > 0; i--) {
+        let idx = Math.abs(i-236);
+        if (idx < fileNameArray.length) {
+          buffer[i] = fileNameArray[idx];
+        } else {
+          buffer[i] = 0;
+        }
+      }
+
+      for (let i = 246; i > 236; i--) {
+        let idx = Math.abs(i-246);
+        if (idx < bufferSize.length) {
+          buffer[i] = bufferSize[idx];
+        } else {
+          buffer[i] = 0;
+        }
+      }
+
+      const { useEncryption } = this.state;
+      if (useEncryption) {
+        dataBuffer = encodeFile(dataBuffer, encryptionKey);
+      }
+
+      for (let i = 0; i < dataBuffer.length; i++) {
+        buffer[i+247] = dataBuffer[i];
+      }
+      let dataBitplanes = convertArrayBufferToBitplanesArray(buffer);
+      let sourceBitplanes = convertArrayBufferToBitplanesArray(sourceImgData.data);
+      sourceBitplanes = this.convertPBC_CGC(sourceBitplanes);
+
+      const alpha = 0.3;
+      let dataCounter = 0;
+      let conjugationMap = [];
+      if (hidingOption === "sequence") {
+        for(let i = 0; i < sourceBitplanes.length; i++) {
+          if (this.calculateComplexity(sourceBitplanes[i]) < alpha) {
+            if (dataCounter < dataBitplanes.length) {
+              let complexity = this.calculateComplexity(dataBitplanes[dataCounter]);
+              if (complexity > alpha) {
+                sourceBitplanes[i] = dataBitplanes[dataCounter];
+              } else {
+                conjugationMap.push(i);
+                let conjugation = this.conjugate(dataBitplanes[dataCounter]);
+                sourceBitplanes[i] = conjugation;
+              }
+              dataCounter++;
+            } else {
+              //Insert conjugation map
+              break;
+            }
+          }
+        }
+      } else {
+
+      }
+
+      sourceBitplanes = this.convertPBC_CGC(sourceBitplanes);
+      let result = convertBitplanesArrayToArrayBuffer(sourceBitplanes);
+      this.renderResultImg(sourceImgURL, result);
+    });
+  }
+
+  getBPCS(sourceImgURL, encryptionKey) {
+    let sourceImgData = this.getImageData(sourceImgURL);
+    let sourceBitplanes = convertArrayBufferToBitplanesArray(sourceImgData.data);
+
+    const alpha = 0.3;
+    let result = [];
+    for(let i = 0; i < sourceBitplanes.length; i++) {
+      if (this.calculateComplexity(sourceBitplanes[i]) > alpha) {
+        result.push(sourceBitplanes[i]);
+      }
+    }
+    
+    let resultArray = convertBitplanesArrayToArrayBuffer(result);
+
+    let hidingOption = null;
+    let fileName = "";
+    let fileSize = "";
+    
+    if (resultArray[0] === 1) {
+      hidingOption = "sequence";
+    } else {
+      hidingOption = "random";
+    }
+
+    if (hidingOption === "sequence") {
+      for (let i = 1; i < 247; i++) {
+        if (i < 237) {
+          fileName += String.fromCharCode(resultArray[i]);
+        } else {
+          fileSize += String.fromCharCode(resultArray[i]);
+        }
+      }
+    } else {
+
+    }
+
+    console.log(fileName);
+    console.log(hidingOption);
+    // downloadBinaryFile("result.png", resultArray);
   }
 
   renderImg = (file) => {
@@ -253,13 +485,26 @@ export default class Image extends React.PureComponent {
         }
       } else { //this.action === "extract"
         if (sourceImg.files.length > 0) {
-          this.getLSB(sourceImgURL, encryptionKey, hidingOption);
+          this.getLSB(sourceImgURL, encryptionKey);
         } else {
           alert("Source Media to Extract Must Exist!");
         }
       }
-    } else {
-      //BCPS
+    } else { //BPCS
+      if (this.action === "hide") {
+        if (sourceImg.files.length > 0 && fileToHide.files.length > 0) {
+          this.setState({fileName: fileToHide.files[0].name});
+          this.BPCSEmbed(sourceImgURL, fileToHide.files[0], encryptionKey, hidingOption);
+        } else {
+          alert("Source Media and File to Hide Must Exist!");
+        }
+      } else { //this.action === "extract"
+        if (sourceImg.files.length > 0) {
+          this.getBPCS(sourceImgURL, encryptionKey);
+        } else {
+          this.getLSB(sourceImgURL, encryptionKey);
+        }
+      }
     }
   }
 
