@@ -192,7 +192,13 @@ export default class Image extends React.PureComponent {
 
     let result = [];
     temp = "";
+    let fileCorrect = true;
     for (let i = 0; i < fileSize * 8; i++) {
+      if (!sourceImgData.data.length[2049+i]) {
+        fileCorrect = false;
+        alert("Input file bit format different. Enter embedded file made by this program.");
+        break;
+      }
       let color = sourceImgData.data[2049+i].toString(2);
       let lsb = color[color.length-1];
       if (temp.length < 8) {
@@ -208,13 +214,15 @@ export default class Image extends React.PureComponent {
       }
     }
 
-    let resultArray = convertBinaryArrayToArrayBuffer(result);
+    if (fileCorrect) {
+      let resultArray = convertBinaryArrayToArrayBuffer(result);
     
-    if (useEncryption) {
-      resultArray = decodeFile(resultArray, encryptionKey);
+      if (useEncryption) {
+        resultArray = decodeFile(resultArray, encryptionKey);
+      }
+  
+      downloadBinaryFile(fileName, resultArray);
     }
-
-    downloadBinaryFile(fileName, resultArray);
   }
 
   calculateComplexity(bitplane) {
@@ -255,7 +263,7 @@ export default class Image extends React.PureComponent {
     }
   }
 
-  convertPBC_CGC(bitplanesArray) {
+  convertPBC_CGC(bitplanesArray, type) {
     let result = [];
     let modRemainder = bitplanesArray.length % 8;
     for (let i = 0; i < bitplanesArray.length; i++) {
@@ -265,29 +273,11 @@ export default class Image extends React.PureComponent {
         } else {
           let bitplane = [];
           for (let j = 0; j < 64; j++) {
-            bitplane.push(this.xor(bitplanesArray[i-1][j], bitplanesArray[i][j]));
+            let xorResult = this.xor(bitplanesArray[i-1][j], bitplanesArray[i][j]);
+            bitplane.push(xorResult);;
           }
-          result.push(bitplane);
-        }
-      } else {
-        result.push(bitplanesArray[i]);
-      }
-    }
-
-    return result;
-  }
-
-  convertPBC_CGC(bitplanesArray) {
-    let result = [];
-    let modRemainder = bitplanesArray.length % 8;
-    for (let i = 0; i < bitplanesArray.length; i++) {
-      if (i < bitplanesArray.length-modRemainder) {
-        if (i % 8 === 0) {
-          result.push(bitplanesArray[i]);
-        } else {
-          let bitplane = [];
-          for (let j = 0; j < 64; j++) {
-            bitplane.push(this.xor(bitplanesArray[i-1][j], bitplanesArray[i][j]));
+          if (type === "reverse") {
+            bitplanesArray[i] = bitplane;
           }
           result.push(bitplane);
         }
@@ -352,16 +342,17 @@ export default class Image extends React.PureComponent {
       for (let i = 0; i < dataBuffer.length; i++) {
         buffer[i+247] = dataBuffer[i];
       }
+      
       let dataBitplanes = convertArrayBufferToBitplanesArray(buffer);
       let sourceBitplanes = convertArrayBufferToBitplanesArray(sourceImgData.data);
-      sourceBitplanes = this.convertPBC_CGC(sourceBitplanes);
+      sourceBitplanes = this.convertPBC_CGC(sourceBitplanes, "normal");
 
       const alpha = 0.3;
       let dataCounter = 0;
       let conjugationMap = [];
       if (hidingOption === "sequence") {
         for(let i = 0; i < sourceBitplanes.length; i++) {
-          if (this.calculateComplexity(sourceBitplanes[i]) < alpha) {
+          if (this.calculateComplexity(sourceBitplanes[i]) > alpha) {
             if (dataCounter < dataBitplanes.length) {
               let complexity = this.calculateComplexity(dataBitplanes[dataCounter]);
               if (complexity > alpha) {
@@ -381,8 +372,8 @@ export default class Image extends React.PureComponent {
       } else {
 
       }
-
-      sourceBitplanes = this.convertPBC_CGC(sourceBitplanes);
+      
+      sourceBitplanes = this.convertPBC_CGC(sourceBitplanes, "reverse");
       let result = convertBitplanesArrayToArrayBuffer(sourceBitplanes);
       this.renderResultImg(sourceImgURL, result);
     });
@@ -391,6 +382,7 @@ export default class Image extends React.PureComponent {
   getBPCS(sourceImgURL, encryptionKey) {
     let sourceImgData = this.getImageData(sourceImgURL);
     let sourceBitplanes = convertArrayBufferToBitplanesArray(sourceImgData.data);
+    sourceBitplanes = this.convertPBC_CGC(sourceBitplanes, "normal");
 
     const alpha = 0.3;
     let result = [];
@@ -401,7 +393,7 @@ export default class Image extends React.PureComponent {
     }
     
     let resultArray = convertBitplanesArrayToArrayBuffer(result);
-
+    console.log(resultArray);
     let hidingOption = null;
     let fileName = "";
     let fileSize = "";
@@ -426,7 +418,7 @@ export default class Image extends React.PureComponent {
 
     console.log(fileName);
     console.log(hidingOption);
-    // downloadBinaryFile("result.png", resultArray);
+    downloadBinaryFile(fileName, resultArray);
   }
 
   renderImg = (file) => {
