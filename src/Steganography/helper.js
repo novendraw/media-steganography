@@ -162,7 +162,47 @@ function convertBitplanesArrayToArrayBuffer(bitplanesArray) {
   return result;
 }
 
+//Integer <=> Bitplane
+function convertIntegerToBitplane(integer) {
+  let bitplane = [];
+  let string = integer.toString(2);
+  let modRemainder = string.length % 64;
+  if (modRemainder !== 0) {
+    let header = "0";
+    header = header.repeat(64 - modRemainder);
+    string = header + string;
+  }
+
+  for (let i = 0; i < 64; i++) {
+    bitplane.push(string[i]);
+  }
+
+  return bitplane;
+}
+
+function convertBitplaneToInteger(bitplane) {
+  let firstFound = false;
+  let binaryString = "";
+  for (let i = 0; i < bitplane.length; i++) {
+    if (!firstFound) {
+      if (bitplane[i] === "1") {
+        firstFound = true;
+        binaryString += bitplane[i];
+      }
+    } else {
+      binaryString += bitplane[i];
+    }
+  }
+
+  if (!firstFound) {
+    return 0;
+  } else {
+    return parseInt(binaryString, 2);
+  }
+}
+
 // Binary Methods
+
 function removeLeadingZeroes(binaryString) {
   let string = binaryString.replace(/^0+/, '');
   let modRemainder = string.length % 8;
@@ -265,6 +305,8 @@ export {
   convertBinaryArrayToArrayBuffer,
   convertArrayBufferToBitplanesArray,
   convertBitplanesArrayToArrayBuffer,
+  convertIntegerToBitplane,
+  convertBitplaneToInteger,
   readFileAsArrayBuffer,
   readFileAsString,
   readTwoFiles,
