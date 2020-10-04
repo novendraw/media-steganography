@@ -9,14 +9,17 @@ import {
 } from 'react-bootstrap';
 
 import {
-  readFileAsArrayBuffer,
   readTwoFiles,
   readFileURL,
   downloadBinaryFile,
-  mod,
-  convertArrayBufferToString,
   encodeFile,
   decodeFile,
+  convertBinaryStringToString,
+  convertStringToBinaryString,
+  convertStringToArrayBuffer,
+  convertArrayBufferToString,
+  convertArrayBufferToBinaryString,
+  convertBinaryStringToArrayBufferWithLeadingZeroes,
 } from './helper';
 
 import { 
@@ -37,11 +40,11 @@ export default class Video extends React.PureComponent {
       resultVid: null,
       seed: null,
       resultVidFilename: null,
-      resultVidType: null,
+      useEncryption: false,
     };
   }
 
-  encrypt(plainText, message, frameOption, hidingOption, useEncryption, key, seed) {
+  LSBEmbed(plainText, message, messageFilename, frameOption, hidingOption, useEncryption, key, seed) {
     //ENCRYPTION ALGORITHM
     // Read AVI File
     let riff = new RIFFFile();
@@ -60,9 +63,12 @@ export default class Video extends React.PureComponent {
     let frames = []
 
     // Extract video data from AVI file, and divide it into frames
+    // Also counts data size
+    let dataSize = 0
     for (let i = 0; i < subChunksLength; i++) {
       if (riff.signature.subChunks[iData].subChunks[i].chunkId[2] === 'd') {
         frames.push(riff.signature.subChunks[iData].subChunks[i])
+        dataSize += riff.signature.subChunks[iData].subChunks[i].chunkSize
       }
     }
 
@@ -79,12 +85,17 @@ export default class Video extends React.PureComponent {
     }
     console.log(frames)
 
+    if (messageLength * 8 > dataSize) {
+      alert("Source capacity is not enough");
+      return
+    }
+
     // convert Uint8Array to binary string
     let binaryMessage = ''
     for (let i = 0; i < messageLength; i++) {
       binaryMessage += ("000000000" + message[i].toString(2)).substr(-8)
     }
-    console.log()
+
     // construct stream of frames used
     let bytesSize = 0
     let iFrame = 0
@@ -113,17 +124,123 @@ export default class Video extends React.PureComponent {
       cipherText[plainTextBytes[i]] = bytesPlainText
     }
 
-    this.setState({ resultVidFilename: "result" })
-    this.setState({ resultVidType: "avi" })
+    // insert metadata to 'JUNK'
+    // find 'JUNK' location
+    let iJunk = 0
+    for (let i = 0; i < riff.signature.subChunks.length; i++) {
+      if (riff.signature.subChunks[i].chunkId === 'JUNK') {
+        iJunk = i
+        break;
+      }
+    }
+    let junkStart = riff.signature.subChunks[iJunk].chunkData.start
+    let junkEnd = riff.signature.subChunks[iJunk].chunkData.end
+
+    let setting = ''
+    let filename = ''
+    let filesize = ''
+    // frame and hiding option
+    if (frameOption === 'random') {
+      setting += '0'
+    }
+    else {
+      setting += '1'
+    }
+    if (hidingOption === 'random') {
+      setting += '0'
+    }
+    else {
+      setting += '1'
+    }
+    setting = '000000' + setting
+    setting = parseInt(setting, 2)
+    cipherText[junkStart] = setting
+    iJunk = junkStart + 1
+
+    // filename
+    let filenameBinary = convertStringToBinaryString(messageFilename)
+
+    while (filenameBinary.length < 2016) {
+      filenameBinary = '0' + filenameBinary
+    }
+
+    let filenameArrayBuffer = convertBinaryStringToArrayBufferWithLeadingZeroes(filenameBinary)
+    for (let i = 0; i < 252; i++) {
+      cipherText[iJunk] = filenameArrayBuffer[i]
+      iJunk += 1
+    }
+
+    // filesize
+    console.log(messageLength)
+    let filesizeBinary = messageLength.toString(2)
+    console.log(filesizeBinary)
+    while (filesizeBinary.length < 32) {
+      filesizeBinary = '0' + filesizeBinary
+    }
+    let filesizeArrayBuffer = convertBinaryStringToArrayBufferWithLeadingZeroes(filesizeBinary)
+    for (let i = 0; i < 4; i++) {
+      cipherText[iJunk] = filesizeArrayBuffer[i]
+      iJunk += 1
+    }
+
+    this.setState({ resultVidFilename: "result.avi" })
     this.setState({ resultVid: cipherText })
 
   }
 
-  decrypt(cipherText, message, frameOption, hidingOption, useEncryption, key, seed) {
+  LSBExtract(cipherText, useEncryption, key, seed) {
     //DECRYPTION ALGORITHM
     // Read AVI File
     let riff = new RIFFFile();
     riff.setSignature(cipherText)
+
+    // extract metadata
+    // extract message length
+    let iJunk = 0
+    for (let i = 0; i < riff.signature.subChunks.length; i++) {
+      if (riff.signature.subChunks[i].chunkId === 'JUNK') {
+        iJunk = i
+        break;
+      }
+    }
+    let junkStart = riff.signature.subChunks[iJunk].chunkData.start
+    let junkEnd = riff.signature.subChunks[iJunk].chunkData.end
+
+    let messageType = []
+    messageType.push(cipherText[junkStart])
+    messageType = convertArrayBufferToBinaryString(messageType)
+    let frameOption = messageType[6]
+    let hidingOption = messageType[7]
+    if (frameOption === '0') {
+      frameOption = 'random'
+    }
+    else {
+      frameOption = 'sequence'
+    }
+    if (hidingOption === '0') {
+      hidingOption = 'random'
+    }
+    else {
+      hidingOption = 'sequence'
+    }
+    iJunk = junkStart + 1
+
+    // filename
+    let filenameArrayBuffer = new Uint8Array(252)
+    for (let i = 0; i < 252; i++) {
+      filenameArrayBuffer[i] = cipherText[iJunk]
+      iJunk += 1
+    }
+    let filenameString = convertBinaryStringToString(convertArrayBufferToBinaryString(filenameArrayBuffer))
+
+    // message size
+    let messageLengthBuffer = new Uint8Array(4)
+    for (let i = 0; i < 252; i++) {
+      messageLengthBuffer[i] = cipherText[iJunk]
+      iJunk += 1
+    }
+    let messageLength = parseInt(convertArrayBufferToBinaryString(messageLengthBuffer), 2)
+    let binaryMessageLength = messageLength * 8;
 
     // Find subChunks with format 'movi' indicating video data
     let iData = 0
@@ -146,7 +263,6 @@ export default class Video extends React.PureComponent {
 
     // Encrypt message if key !== -1
     let plainText = cipherText
-    let messageLength = message.length
     
 
     // randomize frame sequence if frameOption === 'random'
@@ -154,18 +270,12 @@ export default class Video extends React.PureComponent {
       frames = shuffleSeed.shuffle(frames, seed)
     }
     console.log(frames)
-
-    // convert Uint8Array to binary string
-    let binaryMessage = ''
-    for (let i = 0; i < messageLength; i++) {
-      binaryMessage += ("000000000" + message[i].toString(2)).substr(-8)
-    }
     
     // construct stream of frames used
     let bytesSize = 0
     let iFrame = 0
     let cipherTextBytes = []
-    while (bytesSize < binaryMessage.length) {
+    while (bytesSize < binaryMessageLength) {
       let arrayBytes = []
       for (let i = frames[iFrame].chunkData.start; i < frames[iFrame].chunkData.end; i++) {
         arrayBytes.push(i)
@@ -180,7 +290,7 @@ export default class Video extends React.PureComponent {
 
     // LSB algorithm
     let binaryOutputMessage = ''
-    for (let i = 0; i < binaryMessage.length; i++) {
+    for (let i = 0; i < binaryMessageLength; i++) {
       let binaryCipherText = ("000000000" + cipherText[cipherTextBytes[i]].toString(2)).substr(-8)
       // console.log(binaryPlainText)
       // console.log(plainText[plainTextBytes[i]])
@@ -201,6 +311,7 @@ export default class Video extends React.PureComponent {
       outputMessage = decodeFile(outputMessage, key)
     }
 
+    this.setState({ resultVidFilename: filenameString })
     this.setState({ resultVid: outputMessage })
   }
 
@@ -217,60 +328,65 @@ export default class Video extends React.PureComponent {
     event.preventDefault();
     let sourceVid = event.target.inputSourceVid;
     let message = event.target.inputMessage;
+    let messageFilename
+    if (this.action === "LSBEmbed" && sourceVid.files.length > 0 && message.files.length > 0) {
+      messageFilename = message.files[0].name
+    }
+    else if (this.action === "LSBEmbed" && (sourceVid.files.length <= 0 || message.files.length <= 0)) {
+      alert("Source Media and Message Media must Exist!");
+      return
+    }
 
-    if (sourceVid.files.length > 0 && message.files.length > 0) {
-      const { sourceVid, message } = this.state;
+    if ((this.action === 'LSBEmbed' && sourceVid.files.length > 0 && message.files.length > 0) || (this.action === 'LSBExtract' && sourceVid.files.length > 0)) {
+      let { sourceVid, message } = this.state;
       let frameOption = event.target.frameOption.value;
       let useEncryption = event.target.useEncryption.checked;
       let hidingOption = event.target.hidingOption.value;
+      let key = event.target.key.value;
+
+      if (this.action === 'LSBExtract') {
+        message = new File([""], "filename");
+      }
       let readResult = readTwoFiles(sourceVid, message);
       var seed;
-      let key = "-1";
+
       readResult.then(([sourceArray, messageArray]) => {
         let sourceBuffer = new Uint8Array(sourceArray);
         let messageBuffer = new Uint8Array(messageArray);
-        if (this.action === "encrypt") {
+        if (this.action === "LSBEmbed") {
           //CALL ENCRYPTION WITH NECESSARY PARAMS
           if (useEncryption) {
-            key = prompt("Enter your key for Encryption:");
             if (key === null || key === "") {
-              alert("Encryption cancelled");
+              alert("Encryption cancelled. Provide key for encryption.");
               return;
             }
           }
-          else {
-            if (hidingOption === 'random' || frameOption === 'random') {
-              key = prompt("Enter your encryption key for random seed:");
-              if (key === null || key === "") {
-                alert("Encryption cancelled");
-                return;
-              }
+          if (hidingOption === 'random' || frameOption === 'random') {
+            if (key === null || key === "") {
+              alert("Encryption cancelled. Provide key for random seed.");
+              return;
             }
           }
           seed = this.getSeedFromKey(key)
           this.setState({ seed: seed})
-          this.encrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, useEncryption, key, seed);
+          this.LSBEmbed(sourceBuffer, messageBuffer, messageFilename, frameOption, hidingOption, useEncryption, key, seed);
         } else {
           //CALL DECRYPTIOn WITH NECESSARY PARAMS
           if (useEncryption) {
-            key = prompt("Enter your key for Decryption:");
             if (key === null || key === "") {
-              alert("Decryption cancelled");
+              alert("Decryption cancelled. Provide key for decryption.");
               return;
             }
           }
-          else {
-            if (hidingOption === 'random' || frameOption === 'random') {
-              key = prompt("Enter your decryption key for random seed:");
-              if (key === null || key === "") {
-                alert("Decryption cancelled");
-                return;
-              }
+          if (hidingOption === 'random' || frameOption === 'random') {
+            if (key === null || key === "") {
+              alert("Decryption cancelled. Provide key for random seed.");
+              return;
             }
           }
           seed = this.getSeedFromKey(key)
           this.setState({ seed: seed })
-          this.decrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, useEncryption, key, seed);
+          this.LSBExtract(sourceBuffer, useEncryption, key, seed);
         }
       });
     } else {
@@ -302,8 +418,12 @@ export default class Video extends React.PureComponent {
     }
   }
 
+  toggleEncryption = (event) => {
+    this.setState({ useEncryption: event.target.checked });
+  }
+
   render() {
-    const { sourceVidURL, messageURL, resultVid, resultVidURL, resultVidFilename, resultVidType} = this.state;
+    const { sourceVidURL, messageURL, resultVid, resultVidURL, resultVidFilename, useEncryption} = this.state;
     return (
       <React.Fragment>
         <Form onSubmit={this.handleSubmit} className="margin-bottom-md">
@@ -313,9 +433,9 @@ export default class Video extends React.PureComponent {
                 Source Media
               </div>
               <div className="content-center full-width margin-bottom-xs">
-                {/* <ResponsiveEmbed aspectRatio="16by9">
+                <ResponsiveEmbed aspectRatio="16by9">
                   <video src={sourceVidURL} className="full-height" controls/>
-                </ResponsiveEmbed> */}
+                </ResponsiveEmbed>
               </div>
               <Form.Group>
                 <Form.File id="inputSourceVid" label="Upload source video" onChange={(e) => this.renderVid(e.target.files, "source")} accept="video/avi"/>
@@ -339,16 +459,16 @@ export default class Video extends React.PureComponent {
                 Result Media
               </div>
               <div className="full-width margin-bottom-xs">
-                {/* <ResponsiveEmbed aspectRatio="16by9">
+                <ResponsiveEmbed aspectRatio="16by9">
                   <video src={resultVidURL} className="full-height" controls/>
-                </ResponsiveEmbed> */}
+                </ResponsiveEmbed>
                 Download Result Media
               </div>
               <Button
                 variant="success"
                 type="button"
                 className="margin-bottom-xs"
-                onClick={() => downloadBinaryFile(resultVidFilename, resultVidType, resultVid)}
+                onClick={() => downloadBinaryFile(resultVidFilename, resultVid)}
               >
                 {" "}
                 Download Result
@@ -357,6 +477,23 @@ export default class Video extends React.PureComponent {
           </Row>
           <Row>
             <Col>
+              <Form.Group controlId="useEncryption">
+                <Form.Check
+                  type="checkbox"
+                  label="Use Encryption"
+                  onChange={this.toggleEncryption}
+                />
+              </Form.Group>
+              <Form.Group controlId="key">
+                <Form.Label>Encryption Key</Form.Label>
+                <Form.Control
+                  type="text"
+                  readOnly={!useEncryption}
+                  ref={(ref) => {
+                    this.key = ref;
+                  }}
+                />
+              </Form.Group>
               <Form.Group controlId="frameOption">
                 <Form.Label>Frame Option</Form.Label>
                 <Form.Control as="select">
@@ -371,30 +508,24 @@ export default class Video extends React.PureComponent {
                   <option value="random">Random</option>
                 </Form.Control>
               </Form.Group>
-              <Form.Group controlId="useEncryption">
-                <Form.Check
-                  type="checkbox"
-                  label="Use Encryption"
-                />
-              </Form.Group>
               <Button
                 variant="primary"
                 type="submit"
                 className="full-width margin-bottom-xs"
-                onClick={() => (this.action = "encrypt")}
+                onClick={() => (this.action = "LSBEmbed")}
               >
                 {" "}
-                Encrypt
+                Hide
               </Button>
 
               <Button
                 variant="info"
                 type="submit"
                 className="full-width"
-                onClick={() => (this.action = "decrypt")}
+                onClick={() => (this.action = "LSBExtract")}
               >
                 {" "}
-                Decrypt
+                Extract
               </Button>
             </Col>
           </Row>
