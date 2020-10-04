@@ -63,9 +63,12 @@ export default class Video extends React.PureComponent {
     let frames = []
 
     // Extract video data from AVI file, and divide it into frames
+    // Also counts data size
+    let dataSize = 0
     for (let i = 0; i < subChunksLength; i++) {
       if (riff.signature.subChunks[iData].subChunks[i].chunkId[2] === 'd') {
         frames.push(riff.signature.subChunks[iData].subChunks[i])
+        dataSize += riff.signature.subChunks[iData].subChunks[i].chunkSize
       }
     }
 
@@ -82,12 +85,17 @@ export default class Video extends React.PureComponent {
     }
     console.log(frames)
 
+    if (messageLength * 8 > dataSize) {
+      alert("Source capacity is not enough");
+      return
+    }
+
     // convert Uint8Array to binary string
     let binaryMessage = ''
     for (let i = 0; i < messageLength; i++) {
       binaryMessage += ("000000000" + message[i].toString(2)).substr(-8)
     }
-    console.log()
+
     // construct stream of frames used
     let bytesSize = 0
     let iFrame = 0
