@@ -26,6 +26,8 @@ import {
   downloadBinaryFile,
 } from './helper';
 
+import shuffleSeed from 'shuffle-seed';
+
 export default class Image extends React.PureComponent {
   constructor(props) {
     super(props);
@@ -68,23 +70,6 @@ export default class Image extends React.PureComponent {
     return imageData;
   }
 
-  getRGBAString(imageData, encryptionKey) {
-    const { useEncryption } = this.state;
-
-    let result = "";
-    for (let i = 0; i < imageData.data.length; i++) {
-      let data = imageData.data[i];
-      if (useEncryption) {
-        //ENCRYPT DATA
-      }
-      let color = data.toString(2);
-      color = "00000000".substr(color.length) + color;
-      result += color;
-    }
-
-    return result;
-  }
-
   LSBEmbed(sourceImgURL, fileToHide, encryptionKey, hidingOption) {
     let sourceImgData = this.getImageData(sourceImgURL);
     let sourceLength = sourceImgData.data.length;
@@ -124,27 +109,30 @@ export default class Image extends React.PureComponent {
         let fileSize = bufferLength.toString(2);
         fileSize = "00000000000000000000000000000000".substr(fileSize.length) + fileSize;
 
-        let bufferString = convertArrayBufferToBinaryString(buffer);
+        let bufferArray = Array.from(buffer);
+        if (useEncryption && hidingOption === "random") {
+          bufferArray = shuffleSeed.shuffle(bufferArray, encryptionKey);
+        }
+        let bufferString = convertArrayBufferToBinaryString(bufferArray);
 
         this.setState({buffer: bufferString});
         let result = [];
         for (let i = 0; i < sourceLength; i++) {
           let color = sourceImgData.data[i].toString(2);
-          if (hidingOption === "sequence") {
-            if (i < 1) {
-              color = color.substr(0, color.length-1) + "1";
-            } else if (i < 2017) { //1+256*8-32
-              color = color.substr(0, color.length-1) + binaryFileName[i-1];
-            } else if (i < 2049) {
-              color = color.substr(0, color.length-1) + fileSize[i-2017];
+          if (i < 1) {
+            if (useEncryption && hidingOption === "random") {
+              color = color.substr(0, color.length-1) + "0";
             } else {
-              if (i < 2049 + bufferLength * 8) {
-                color = color.substr(0, color.length-1) + bufferString[i-2049];
-              } else {
-              }
+              color = color.substr(0, color.length-1) + "1";
             }
+          } else if (i < 2017) { //1+256*8-32
+            color = color.substr(0, color.length-1) + binaryFileName[i-1];
+          } else if (i < 2049) {
+            color = color.substr(0, color.length-1) + fileSize[i-2017];
           } else {
-            //hidingOption === "random"
+            if (i < 2049 + bufferLength * 8) {
+              color = color.substr(0, color.length-1) + bufferString[i-2049];
+            }
           }
           result.push(color);
         }
@@ -171,12 +159,9 @@ export default class Image extends React.PureComponent {
     }
 
     for (let i = 1; i < 2049 && i < sourceLength; i++) {
-      if (hidingOption === "sequence") {
-        let color = sourceImgData.data[i].toString(2);
-        let lsb = color[color.length-1];
-        temp += lsb;
-      } else {
-      }
+      let color = sourceImgData.data[i].toString(2);
+      let lsb = color[color.length-1];
+      temp += lsb;
     }
     
     let fileName = temp.substr(0, 2016);
@@ -194,13 +179,13 @@ export default class Image extends React.PureComponent {
 
     let result = [];
     temp = "";
-    let fileCorrect = true;
+    // let fileCorrect = true;
     for (let i = 0; i < fileSize * 8; i++) {
-      if (!sourceImgData.data.length[2049+i]) {
-        fileCorrect = false;
-        alert("Input file bit format different. Enter embedded file made by this program.");
-        break;
-      }
+      // if (!sourceImgData.data.length[2049+i]) {
+      //   fileCorrect = false;
+      //   alert("Input file bit format different. Enter embedded file made by this program.");
+      //   break;
+      // }
       let color = sourceImgData.data[2049+i].toString(2);
       let lsb = color[color.length-1];
       if (temp.length < 8) {
@@ -216,15 +201,20 @@ export default class Image extends React.PureComponent {
       }
     }
 
-    if (fileCorrect) {
+    // if (fileCorrect) {
       let resultArray = convertBinaryArrayToArrayBuffer(result);
-    
+  
+      if (useEncryption && hidingOption === "random") {
+        let shuffledArray = Array.from(resultArray);
+        resultArray = shuffleSeed.unshuffle(shuffledArray, encryptionKey);
+      }
+
       if (useEncryption) {
         resultArray = decodeFile(resultArray, encryptionKey);
       }
   
       downloadBinaryFile(fileName, resultArray);
-    }
+    // }
   }
 
   calculateComplexity(bitplane) {

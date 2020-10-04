@@ -307,6 +307,7 @@ export {
   convertBitplanesArrayToArrayBuffer,
   convertIntegerToBitplane,
   convertBitplaneToInteger,
+  removeLeadingZeroes,
   readFileAsArrayBuffer,
   readFileAsString,
   readTwoFiles,
