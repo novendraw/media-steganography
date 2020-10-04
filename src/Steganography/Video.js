@@ -9,14 +9,17 @@ import {
 } from 'react-bootstrap';
 
 import {
-  readFileAsArrayBuffer,
   readTwoFiles,
   readFileURL,
   downloadBinaryFile,
-  mod,
-  convertArrayBufferToString,
   encodeFile,
   decodeFile,
+  convertBinaryStringToString,
+  convertStringToBinaryString,
+  convertStringToArrayBuffer,
+  convertArrayBufferToString,
+  convertArrayBufferToBinaryString,
+  convertBinaryStringToArrayBufferWithLeadingZeroes,
 } from './helper';
 
 import { 
@@ -37,11 +40,10 @@ export default class Video extends React.PureComponent {
       resultVid: null,
       seed: null,
       resultVidFilename: null,
-      resultVidType: null,
     };
   }
 
-  encrypt(plainText, message, frameOption, hidingOption, useEncryption, key, seed) {
+  encrypt(plainText, message, messageFilename, frameOption, hidingOption, useEncryption, key, seed) {
     //ENCRYPTION ALGORITHM
     // Read AVI File
     let riff = new RIFFFile();
@@ -113,17 +115,123 @@ export default class Video extends React.PureComponent {
       cipherText[plainTextBytes[i]] = bytesPlainText
     }
 
-    this.setState({ resultVidFilename: "result" })
-    this.setState({ resultVidType: "avi" })
+    // insert metadata to 'JUNK'
+    // find 'JUNK' location
+    let iJunk = 0
+    for (let i = 0; i < riff.signature.subChunks.length; i++) {
+      if (riff.signature.subChunks[i].chunkId === 'JUNK') {
+        iJunk = i
+        break;
+      }
+    }
+    let junkStart = riff.signature.subChunks[iJunk].chunkData.start
+    let junkEnd = riff.signature.subChunks[iJunk].chunkData.end
+
+    let setting = ''
+    let filename = ''
+    let filesize = ''
+    // frame and hiding option
+    if (frameOption === 'random') {
+      setting += '0'
+    }
+    else {
+      setting += '1'
+    }
+    if (hidingOption === 'random') {
+      setting += '0'
+    }
+    else {
+      setting += '1'
+    }
+    setting = '000000' + setting
+    setting = parseInt(setting, 2)
+    cipherText[junkStart] = setting
+    iJunk = junkStart + 1
+
+    // filename
+    let filenameBinary = convertStringToBinaryString(messageFilename)
+
+    while (filenameBinary.length < 2016) {
+      filenameBinary = '0' + filenameBinary
+    }
+
+    let filenameArrayBuffer = convertBinaryStringToArrayBufferWithLeadingZeroes(filenameBinary)
+    for (let i = 0; i < 252; i++) {
+      cipherText[iJunk] = filenameArrayBuffer[i]
+      iJunk += 1
+    }
+
+    // filesize
+    console.log(messageLength)
+    let filesizeBinary = messageLength.toString(2)
+    console.log(filesizeBinary)
+    while (filesizeBinary.length < 32) {
+      filesizeBinary = '0' + filesizeBinary
+    }
+    let filesizeArrayBuffer = convertBinaryStringToArrayBufferWithLeadingZeroes(filesizeBinary)
+    for (let i = 0; i < 4; i++) {
+      cipherText[iJunk] = filesizeArrayBuffer[i]
+      iJunk += 1
+    }
+
+    this.setState({ resultVidFilename: "result.avi" })
     this.setState({ resultVid: cipherText })
 
   }
 
-  decrypt(cipherText, message, frameOption, hidingOption, useEncryption, key, seed) {
+  decrypt(cipherText, useEncryption, key, seed) {
     //DECRYPTION ALGORITHM
     // Read AVI File
     let riff = new RIFFFile();
     riff.setSignature(cipherText)
+
+    // extract metadata
+    // extract message length
+    let iJunk = 0
+    for (let i = 0; i < riff.signature.subChunks.length; i++) {
+      if (riff.signature.subChunks[i].chunkId === 'JUNK') {
+        iJunk = i
+        break;
+      }
+    }
+    let junkStart = riff.signature.subChunks[iJunk].chunkData.start
+    let junkEnd = riff.signature.subChunks[iJunk].chunkData.end
+
+    let messageType = []
+    messageType.push(cipherText[junkStart])
+    messageType = convertArrayBufferToBinaryString(messageType)
+    let frameOption = messageType[6]
+    let hidingOption = messageType[7]
+    if (frameOption === '0') {
+      frameOption = 'random'
+    }
+    else {
+      frameOption = 'sequence'
+    }
+    if (hidingOption === '0') {
+      hidingOption = 'random'
+    }
+    else {
+      hidingOption = 'sequence'
+    }
+    iJunk = junkStart + 1
+
+    // filename
+    let filenameArrayBuffer = new Uint8Array(252)
+    for (let i = 0; i < 252; i++) {
+      filenameArrayBuffer[i] = cipherText[iJunk]
+      iJunk += 1
+    }
+    let filenameString = convertBinaryStringToString(convertArrayBufferToBinaryString(filenameArrayBuffer))
+
+    // message size
+    let messageLengthBuffer = new Uint8Array(4)
+    for (let i = 0; i < 252; i++) {
+      messageLengthBuffer[i] = cipherText[iJunk]
+      iJunk += 1
+    }
+    let messageLength = parseInt(convertArrayBufferToBinaryString(messageLengthBuffer), 2)
+    let binaryMessageLength = messageLength * 8;
 
     // Find subChunks with format 'movi' indicating video data
     let iData = 0
@@ -146,7 +254,6 @@ export default class Video extends React.PureComponent {
 
     // Encrypt message if key !== -1
     let plainText = cipherText
-    let messageLength = message.length
     
 
     // randomize frame sequence if frameOption === 'random'
@@ -154,18 +261,12 @@ export default class Video extends React.PureComponent {
       frames = shuffleSeed.shuffle(frames, seed)
     }
     console.log(frames)
-
-    // convert Uint8Array to binary string
-    let binaryMessage = ''
-    for (let i = 0; i < messageLength; i++) {
-      binaryMessage += ("000000000" + message[i].toString(2)).substr(-8)
-    }
     
     // construct stream of frames used
     let bytesSize = 0
     let iFrame = 0
     let cipherTextBytes = []
-    while (bytesSize < binaryMessage.length) {
+    while (bytesSize < binaryMessageLength) {
       let arrayBytes = []
       for (let i = frames[iFrame].chunkData.start; i < frames[iFrame].chunkData.end; i++) {
         arrayBytes.push(i)
@@ -180,7 +281,7 @@ export default class Video extends React.PureComponent {
 
     // LSB algorithm
     let binaryOutputMessage = ''
-    for (let i = 0; i < binaryMessage.length; i++) {
+    for (let i = 0; i < binaryMessageLength; i++) {
       let binaryCipherText = ("000000000" + cipherText[cipherTextBytes[i]].toString(2)).substr(-8)
       // console.log(binaryPlainText)
       // console.log(plainText[plainTextBytes[i]])
@@ -201,6 +302,7 @@ export default class Video extends React.PureComponent {
       outputMessage = decodeFile(outputMessage, key)
     }
 
+    this.setState({ resultVidFilename: filenameString })
     this.setState({ resultVid: outputMessage })
   }
 
@@ -217,12 +319,19 @@ export default class Video extends React.PureComponent {
     event.preventDefault();
     let sourceVid = event.target.inputSourceVid;
     let message = event.target.inputMessage;
+    let messageFilename
+    if (this.action === "encrypt") {
+      messageFilename = message.files[0].name
+    }
 
-    if (sourceVid.files.length > 0 && message.files.length > 0) {
-      const { sourceVid, message } = this.state;
+    if ((this.action === 'encrypt' && sourceVid.files.length > 0 && message.files.length > 0) || (this.action === 'decrypt' && sourceVid.files.length > 0)) {
+      let { sourceVid, message } = this.state;
       let frameOption = event.target.frameOption.value;
       let useEncryption = event.target.useEncryption.checked;
       let hidingOption = event.target.hidingOption.value;
+      if (this.action === 'decrypt') {
+        message = new File([""], "filename");
+      }
       let readResult = readTwoFiles(sourceVid, message);
       var seed;
       let key = "-1";
@@ -249,7 +358,7 @@ export default class Video extends React.PureComponent {
           }
           seed = this.getSeedFromKey(key)
           this.setState({ seed: seed})
-          this.encrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, useEncryption, key, seed);
+          this.encrypt(sourceBuffer, messageBuffer, messageFilename, frameOption, hidingOption, useEncryption, key, seed);
         } else {
           //CALL DECRYPTIOn WITH NECESSARY PARAMS
           if (useEncryption) {
@@ -270,7 +379,7 @@ export default class Video extends React.PureComponent {
           }
           seed = this.getSeedFromKey(key)
           this.setState({ seed: seed })
-          this.decrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, useEncryption, key, seed);
+          this.decrypt(sourceBuffer, useEncryption, key, seed);
         }
       });
     } else {
@@ -303,7 +412,7 @@ export default class Video extends React.PureComponent {
   }
 
   render() {
-    const { sourceVidURL, messageURL, resultVid, resultVidURL, resultVidFilename, resultVidType} = this.state;
+    const { sourceVidURL, messageURL, resultVid, resultVidURL, resultVidFilename} = this.state;
     return (
       <React.Fragment>
         <Form onSubmit={this.handleSubmit} className="margin-bottom-md">
@@ -348,7 +457,7 @@ export default class Video extends React.PureComponent {
                 variant="success"
                 type="button"
                 className="margin-bottom-xs"
-                onClick={() => downloadBinaryFile(resultVidFilename, resultVidType, resultVid)}
+                onClick={() => downloadBinaryFile(resultVidFilename, resultVid)}
               >
                 {" "}
                 Download Result

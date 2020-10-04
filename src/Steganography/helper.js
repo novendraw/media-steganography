@@ -86,6 +86,20 @@ function convertBinaryStringToArrayBuffer(binaryString) {
   return result;
 }
 
+function convertBinaryStringToArrayBufferWithLeadingZeroes(binaryString) {
+  let string = binaryString
+  let result = new Uint8Array(string.length / 8);
+  let i = 0;
+  console.log(result)
+  while (string.length > 0) {
+    let substr = string.substr(0, 8);
+    result[i] = parseInt(substr, 2);
+    string = string.substring(8);
+    i++;
+  }
+  return result;
+}
+
 // String <=> Binary String
 
 function convertStringToBinaryString(string) {
@@ -221,6 +235,7 @@ export {
   convertStringToBinaryString,
   convertBinaryStringToString,
   convertBinaryArrayToArrayBuffer,
+  convertBinaryStringToArrayBufferWithLeadingZeroes,
   readFileAsArrayBuffer,
   readFileAsString,
   readTwoFiles,
