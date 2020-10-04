@@ -3,6 +3,7 @@ import { Tab, Row, Col, Nav } from "react-bootstrap";
 
 import Header from "./Header";
 import Image from "./Steganography/Image";
+import Video from "./Steganography/Video";
 
 function App() {
   return (
@@ -36,7 +37,7 @@ function App() {
                   <Image/>
                 </Tab.Pane>
                 <Tab.Pane eventKey="video-steganography">
-                  video-steganography
+                  <Video/>
                 </Tab.Pane>
                 <Tab.Pane eventKey="audio-steganography">
                   audio-steganography
