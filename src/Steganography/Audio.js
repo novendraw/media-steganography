@@ -78,8 +78,9 @@ export default class Audio extends React.PureComponent {
         let source = new Uint8Array(await readFileAsArrayBuffer(files[0]));
         source = convertArrayBufferToBinaryString(source);
         let message = convertArrayBufferToBinaryString(await this.getMessage());
-        if (source.length < message.length + 2401) {
-            return "message too large";
+        if (source.length < (message.length + 2049) * 8) {
+            alert("message too large");
+            return;
         }
 
         let embedded = "";
@@ -149,8 +150,9 @@ export default class Audio extends React.PureComponent {
         for (let i = 0; i < size; i++) {
             message += source.charAt(16751 + i * 8);
         }
+        message = convertBinaryStringToArrayBuffer(message);
         if (this.state.useEncryption) {
-            message = decodeFile(convertBinaryStringToArrayBuffer(message), document.getElementById('key').value);
+            message = decodeFile(message, document.getElementById('key').value);
         }
         let file = new File([message], this.state.messageFilename);
         this.setState({extractedMessage: URL.createObjectURL(file)});
