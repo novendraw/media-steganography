@@ -606,6 +606,8 @@ export default class Image extends React.PureComponent {
       finalArray[i-leadingZeroes] = resultArray[i];
     }
 
+    const { useEncryption } = this.state;
+
     if (useEncryption) {
       if (hidingOption === "random") {
         let shuffledArray = Array.from(finalArray);
