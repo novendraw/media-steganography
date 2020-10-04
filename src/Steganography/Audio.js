@@ -89,7 +89,6 @@ export default class Audio extends React.PureComponent {
         } else {
             embedded += "1";
         }
-
         let filename = await this.getFileName();
         filename = convertStringToBinaryString(filename);
         filename = "0".repeat(2016 - filename.length) + filename;
@@ -101,17 +100,50 @@ export default class Audio extends React.PureComponent {
         embedded += message;
         let result = source.substr(0, 359);
         let i = 359;
-        while (embedded.length > ((i - 351) / 8) - 1) {
-            if ((i + 1) % 8 !== 0 ||
-                embedded.charAt(((i - 351) / 8) - 1) === undefined ||
-                embedded.charAt(((i - 351) / 8) - 1) === "") {
-                result += source.charAt(i);
-            } else {
-                result += embedded.charAt(((i - 351) / 8) - 1);
+        if (this.state.useRandom) {
+            let rand = require('random-seed').create();
+            rand.seed(document.getElementById('key').value);
+            while ((embedded.length > ((i - 351) / 8) - 1) && (i < 16744)) {
+                if ((i + 1) % 8 !== 0 ||
+                    embedded.charAt(((i - 351) / 8) - 1) === undefined ||
+                    embedded.charAt(((i - 351) / 8) - 1) === "") {
+                    result += source.charAt(i);
+                } else {
+                    result += embedded.charAt(((i - 351) / 8) - 1);
+                }
+                i++;
             }
-            i++;
+            let remainder = source.length - result.length;
+            result += source.substr(i, source.length - result.length);
+            remainder /= 8;
+            let randomizedSet = new Set();
+            for (let j = 0; j < message.length; j++) {
+                let entry = rand(remainder + 1);
+                while (randomizedSet.has(entry)) {
+                    entry = rand(remainder + 1);
+                }
+                randomizedSet.add(entry);
+            }
+            let randomizedArray = Array.from(randomizedSet);
+            result = result.split("");
+            for (let k = 0; k < message.length; k++) {
+                result[16751 + randomizedArray[k] * 8] = message[k];
+            }
+            result = result.join("");
+        } else {
+            while (embedded.length > ((i - 351) / 8) - 1) {
+                if ((i + 1) % 8 !== 0 ||
+                    embedded.charAt(((i - 351) / 8) - 1) === undefined ||
+                    embedded.charAt(((i - 351) / 8) - 1) === "") {
+                    result += source.charAt(i);
+                } else {
+                    result += embedded.charAt(((i - 351) / 8) - 1);
+                }
+                i++;
+            }
+            result += source.substr(i, source.length - result.length);
         }
-        result += source.substr(i, source.length - result.length);
+
         result = convertBinaryStringToArrayBuffer(result);
         let file = new File([result], this.state.sourceFilename, {
             lastModified: document.getElementById("inputSourceAudio").files[0].lastModified,
@@ -147,8 +179,27 @@ export default class Audio extends React.PureComponent {
         size = parseInt(size) * 8;
 
         let message = "";
-        for (let i = 0; i < size; i++) {
-            message += source.charAt(16751 + i * 8);
+        if (useRandom) {
+            let rand = require('random-seed').create(document.getElementById('key').value);
+            rand.seed(document.getElementById('key').value);
+            let remainder = source.length - 16744;
+            remainder /= 8;
+            let randomizedSet = new Set();
+            for (let j = 0; j < size; j++) {
+                let entry = rand(remainder + 1);
+                while (randomizedSet.has(entry)) {
+                    entry = rand(remainder + 1);
+                }
+                randomizedSet.add(entry);
+            }
+            let randomizedArray = Array.from(randomizedSet);
+            for (let k = 0; k < size; k++) {
+                message += source.charAt(16751 + randomizedArray[k] * 8);
+            }
+        } else {
+            for (let i = 0; i < size; i++) {
+                message += source.charAt(16751 + i * 8);
+            }
         }
         message = convertBinaryStringToArrayBuffer(message);
         if (this.state.useEncryption) {
