@@ -12,7 +12,7 @@ import {
   readFileAsArrayBuffer,
   readTwoFiles,
   readFileURL,
-  downloadFile,
+  downloadBinaryFile,
   mod,
   convertArrayBufferToString,
   encodeFile,
@@ -36,10 +36,12 @@ export default class Video extends React.PureComponent {
       messageURL: null,
       resultVid: null,
       seed: null,
+      resultVidFilename: null,
+      resultVidType: null,
     };
   }
 
-  encrypt(plainText, message, frameOption, hidingOption, key, seed) {
+  encrypt(plainText, message, frameOption, hidingOption, useEncryption, key, seed) {
     //ENCRYPTION ALGORITHM
     // Read AVI File
     let riff = new RIFFFile();
@@ -59,7 +61,7 @@ export default class Video extends React.PureComponent {
 
     // Extract video data from AVI file, and divide it into frames
     for (let i = 0; i < subChunksLength; i++) {
-      if (riff.signature.subChunks[iData].subChunks[i].chunkId === '00dc') {
+      if (riff.signature.subChunks[iData].subChunks[i].chunkId[2] === 'd') {
         frames.push(riff.signature.subChunks[iData].subChunks[i])
       }
     }
@@ -67,7 +69,7 @@ export default class Video extends React.PureComponent {
     // Encrypt message if key !== -1
     let cipherText = plainText
     let messageLength = message.length
-    if (key !== "-1") {
+    if (useEncryption) {
       message = encodeFile(message, key)
     }
 
@@ -82,9 +84,7 @@ export default class Video extends React.PureComponent {
     for (let i = 0; i < messageLength; i++) {
       binaryMessage += ("000000000" + message[i].toString(2)).substr(-8)
     }
-
-    console.log(binaryMessage)
-    
+    console.log()
     // construct stream of frames used
     let bytesSize = 0
     let iFrame = 0
@@ -113,11 +113,13 @@ export default class Video extends React.PureComponent {
       cipherText[plainTextBytes[i]] = bytesPlainText
     }
 
+    this.setState({ resultVidFilename: "result" })
+    this.setState({ resultVidType: "avi" })
     this.setState({ resultVid: cipherText })
 
   }
 
-  decrypt(cipherText, message, frameOption, hidingOption, key, seed) {
+  decrypt(cipherText, message, frameOption, hidingOption, useEncryption, key, seed) {
     //DECRYPTION ALGORITHM
     // Read AVI File
     let riff = new RIFFFile();
@@ -137,7 +139,7 @@ export default class Video extends React.PureComponent {
 
     // Extract video data from AVI file, and divide it into frames
     for (let i = 0; i < subChunksLength; i++) {
-      if (riff.signature.subChunks[iData].subChunks[i].chunkId === '00dc') {
+      if (riff.signature.subChunks[iData].subChunks[i].chunkId[2] === 'd') {
         frames.push(riff.signature.subChunks[iData].subChunks[i])
       }
     }
@@ -158,7 +160,7 @@ export default class Video extends React.PureComponent {
     for (let i = 0; i < messageLength; i++) {
       binaryMessage += ("000000000" + message[i].toString(2)).substr(-8)
     }
-
+    
     // construct stream of frames used
     let bytesSize = 0
     let iFrame = 0
@@ -184,7 +186,6 @@ export default class Video extends React.PureComponent {
       // console.log(plainText[plainTextBytes[i]])
       binaryOutputMessage += binaryCipherText[7]
     }
-    console.log(binaryOutputMessage)
 
     // divide outputMessage by 8
     binaryOutputMessage = binaryOutputMessage.match(/.{1,8}/g);
@@ -196,11 +197,20 @@ export default class Video extends React.PureComponent {
     }
 
     // decode message if previously encoded
-    if (key !== "-1") {
+    if (useEncryption) {
       outputMessage = decodeFile(outputMessage, key)
     }
 
     this.setState({ resultVid: outputMessage })
+  }
+
+  getSeedFromKey(key) {
+    let seed = 0
+    for (let i = 0; i < key.length; i++) {
+      seed += key.charCodeAt(i)
+    }
+
+    return seed
   }
 
   handleSubmit = (event) => {
@@ -215,7 +225,7 @@ export default class Video extends React.PureComponent {
       let hidingOption = event.target.hidingOption.value;
       let readResult = readTwoFiles(sourceVid, message);
       var seed;
-      let key;
+      let key = "-1";
       readResult.then(([sourceArray, messageArray]) => {
         let sourceBuffer = new Uint8Array(sourceArray);
         let messageBuffer = new Uint8Array(messageArray);
@@ -223,66 +233,44 @@ export default class Video extends React.PureComponent {
           //CALL ENCRYPTION WITH NECESSARY PARAMS
           if (useEncryption) {
             key = prompt("Enter your key for Encryption:");
-            if (key == null || key == "") {
+            if (key === null || key === "") {
               alert("Encryption cancelled");
               return;
             }
           }
           else {
-            key = "-1";
-          }
-          if (frameOption === 'random' || hidingOption === 'random') {
-            seed = prompt("Enter your random seed:");
-            if (seed == null || seed == "") {
-              alert("Encryption cancelled");
-              return;
-            }
-            else if (isNaN(parseInt(seed, 10))) {
-              alert("Encryption cancelled. Seed should only be numbers");
-              return;
-            }
-            else {
-              this.setState({ seed: parseInt(seed, 10)})
-              this.encrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, key, parseInt(seed, 10));
+            if (hidingOption === 'random' || frameOption === 'random') {
+              key = prompt("Enter your encryption key for random seed:");
+              if (key === null || key === "") {
+                alert("Encryption cancelled");
+                return;
+              }
             }
           }
-          else {
-            seed = "-1"
-            this.setState({ seed: parseInt(seed, 10) })
-            this.encrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, key, parseInt(seed, 10));
-          }
+          seed = this.getSeedFromKey(key)
+          this.setState({ seed: seed})
+          this.encrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, useEncryption, key, seed);
         } else {
           //CALL DECRYPTIOn WITH NECESSARY PARAMS
           if (useEncryption) {
             key = prompt("Enter your key for Decryption:");
-            if (key == null || key == "") {
+            if (key === null || key === "") {
               alert("Decryption cancelled");
               return;
             }
           }
           else {
-            key = "-1";
-          }
-          if (frameOption === 'random' || hidingOption === 'random') {
-            seed = prompt("Enter your random seed:");
-            if (seed == null || seed == "") {
-              alert("Decryption cancelled");
-              return;
-            }
-            else if (isNaN(parseInt(seed, 10))) {
-              alert("Decryption cancelled. Seed should only be numbers");
-              return;
-            }
-            else {
-              this.setState({ seed: parseInt(seed, 10) })
-              this.decrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, key, parseInt(seed, 10));
+            if (hidingOption === 'random' || frameOption === 'random') {
+              key = prompt("Enter your decryption key for random seed:");
+              if (key === null || key === "") {
+                alert("Decryption cancelled");
+                return;
+              }
             }
           }
-          else {
-            seed = "-1"
-            this.setState({ seed: parseInt(seed, 10) })
-            this.decrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, key, parseInt(seed, 10));
-          }
+          seed = this.getSeedFromKey(key)
+          this.setState({ seed: seed })
+          this.decrypt(sourceBuffer, messageBuffer, frameOption, hidingOption, useEncryption, key, seed);
         }
       });
     } else {
@@ -315,7 +303,7 @@ export default class Video extends React.PureComponent {
   }
 
   render() {
-    const { sourceVidURL, messageURL, resultVid, resultVidURL } = this.state;
+    const { sourceVidURL, messageURL, resultVid, resultVidURL, resultVidFilename, resultVidType} = this.state;
     return (
       <React.Fragment>
         <Form onSubmit={this.handleSubmit} className="margin-bottom-md">
@@ -325,9 +313,9 @@ export default class Video extends React.PureComponent {
                 Source Media
               </div>
               <div className="content-center full-width margin-bottom-xs">
-                <ResponsiveEmbed aspectRatio="16by9">
+                {/* <ResponsiveEmbed aspectRatio="16by9">
                   <video src={sourceVidURL} className="full-height" controls/>
-                </ResponsiveEmbed>
+                </ResponsiveEmbed> */}
               </div>
               <Form.Group>
                 <Form.File id="inputSourceVid" label="Upload source video" onChange={(e) => this.renderVid(e.target.files, "source")} accept="video/avi"/>
@@ -347,16 +335,17 @@ export default class Video extends React.PureComponent {
               <div className="content-center subheadline bold margin-bottom-sm">
                 Result Media
               </div>
-              <div className="content-center full-width margin-bottom-xs">
-                <ResponsiveEmbed aspectRatio="16by9">
+              <div className="full-width margin-bottom-xs">
+                {/* <ResponsiveEmbed aspectRatio="16by9">
                   <video src={resultVidURL} className="full-height" controls/>
-                </ResponsiveEmbed>
+                </ResponsiveEmbed> */}
+                Download Result Media
               </div>
               <Button
                 variant="success"
                 type="button"
                 className="margin-bottom-xs"
-                onClick={() => downloadFile("result", resultVid)}
+                onClick={() => downloadBinaryFile(resultVidFilename, resultVidType, resultVid)}
               >
                 {" "}
                 Download Result
