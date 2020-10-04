@@ -40,10 +40,11 @@ export default class Video extends React.PureComponent {
       resultVid: null,
       seed: null,
       resultVidFilename: null,
+      useEncryption: false,
     };
   }
 
-  encrypt(plainText, message, messageFilename, frameOption, hidingOption, useEncryption, key, seed) {
+  LSBEmbed(plainText, message, messageFilename, frameOption, hidingOption, useEncryption, key, seed) {
     //ENCRYPTION ALGORITHM
     // Read AVI File
     let riff = new RIFFFile();
@@ -179,7 +180,7 @@ export default class Video extends React.PureComponent {
 
   }
 
-  decrypt(cipherText, useEncryption, key, seed) {
+  LSBExtract(cipherText, useEncryption, key, seed) {
     //DECRYPTION ALGORITHM
     // Read AVI File
     let riff = new RIFFFile();
@@ -320,66 +321,64 @@ export default class Video extends React.PureComponent {
     let sourceVid = event.target.inputSourceVid;
     let message = event.target.inputMessage;
     let messageFilename
-    if (this.action === "encrypt") {
+    if (this.action === "LSBEmbed" && sourceVid.files.length > 0 && message.files.length > 0) {
       messageFilename = message.files[0].name
     }
+    else if (this.action === "LSBEmbed" && (sourceVid.files.length <= 0 || message.files.length <= 0)) {
+      alert("Source Media and Message Media must Exist!");
+      return
+    }
 
-    if ((this.action === 'encrypt' && sourceVid.files.length > 0 && message.files.length > 0) || (this.action === 'decrypt' && sourceVid.files.length > 0)) {
+    if ((this.action === 'LSBEmbed' && sourceVid.files.length > 0 && message.files.length > 0) || (this.action === 'LSBExtract' && sourceVid.files.length > 0)) {
       let { sourceVid, message } = this.state;
       let frameOption = event.target.frameOption.value;
       let useEncryption = event.target.useEncryption.checked;
       let hidingOption = event.target.hidingOption.value;
-      if (this.action === 'decrypt') {
+      let key = event.target.key.value;
+
+      if (this.action === 'LSBExtract') {
         message = new File([""], "filename");
       }
       let readResult = readTwoFiles(sourceVid, message);
       var seed;
-      let key = "-1";
+
       readResult.then(([sourceArray, messageArray]) => {
         let sourceBuffer = new Uint8Array(sourceArray);
         let messageBuffer = new Uint8Array(messageArray);
-        if (this.action === "encrypt") {
+        if (this.action === "LSBEmbed") {
           //CALL ENCRYPTION WITH NECESSARY PARAMS
           if (useEncryption) {
-            key = prompt("Enter your key for Encryption:");
             if (key === null || key === "") {
-              alert("Encryption cancelled");
+              alert("Encryption cancelled. Provide key for encryption.");
               return;
             }
           }
-          else {
-            if (hidingOption === 'random' || frameOption === 'random') {
-              key = prompt("Enter your encryption key for random seed:");
-              if (key === null || key === "") {
-                alert("Encryption cancelled");
-                return;
-              }
+          if (hidingOption === 'random' || frameOption === 'random') {
+            if (key === null || key === "") {
+              alert("Encryption cancelled. Provide key for random seed.");
+              return;
             }
           }
           seed = this.getSeedFromKey(key)
           this.setState({ seed: seed})
-          this.encrypt(sourceBuffer, messageBuffer, messageFilename, frameOption, hidingOption, useEncryption, key, seed);
+          this.LSBEmbed(sourceBuffer, messageBuffer, messageFilename, frameOption, hidingOption, useEncryption, key, seed);
         } else {
           //CALL DECRYPTIOn WITH NECESSARY PARAMS
           if (useEncryption) {
-            key = prompt("Enter your key for Decryption:");
             if (key === null || key === "") {
-              alert("Decryption cancelled");
+              alert("Decryption cancelled. Provide key for decryption.");
               return;
             }
           }
-          else {
-            if (hidingOption === 'random' || frameOption === 'random') {
-              key = prompt("Enter your decryption key for random seed:");
-              if (key === null || key === "") {
-                alert("Decryption cancelled");
-                return;
-              }
+          if (hidingOption === 'random' || frameOption === 'random') {
+            if (key === null || key === "") {
+              alert("Decryption cancelled. Provide key for random seed.");
+              return;
             }
           }
           seed = this.getSeedFromKey(key)
           this.setState({ seed: seed })
-          this.decrypt(sourceBuffer, useEncryption, key, seed);
+          this.LSBExtract(sourceBuffer, useEncryption, key, seed);
         }
       });
     } else {
@@ -411,8 +410,12 @@ export default class Video extends React.PureComponent {
     }
   }
 
+  toggleEncryption = (event) => {
+    this.setState({ useEncryption: event.target.checked });
+  }
+
   render() {
-    const { sourceVidURL, messageURL, resultVid, resultVidURL, resultVidFilename} = this.state;
+    const { sourceVidURL, messageURL, resultVid, resultVidURL, resultVidFilename, useEncryption} = this.state;
     return (
       <React.Fragment>
         <Form onSubmit={this.handleSubmit} className="margin-bottom-md">
@@ -422,9 +425,9 @@ export default class Video extends React.PureComponent {
                 Source Media
               </div>
               <div className="content-center full-width margin-bottom-xs">
-                {/* <ResponsiveEmbed aspectRatio="16by9">
+                <ResponsiveEmbed aspectRatio="16by9">
                   <video src={sourceVidURL} className="full-height" controls/>
-                </ResponsiveEmbed> */}
+                </ResponsiveEmbed>
               </div>
               <Form.Group>
                 <Form.File id="inputSourceVid" label="Upload source video" onChange={(e) => this.renderVid(e.target.files, "source")} accept="video/avi"/>
@@ -448,9 +451,9 @@ export default class Video extends React.PureComponent {
                 Result Media
               </div>
               <div className="full-width margin-bottom-xs">
-                {/* <ResponsiveEmbed aspectRatio="16by9">
+                <ResponsiveEmbed aspectRatio="16by9">
                   <video src={resultVidURL} className="full-height" controls/>
-                </ResponsiveEmbed> */}
+                </ResponsiveEmbed>
                 Download Result Media
               </div>
               <Button
@@ -466,6 +469,23 @@ export default class Video extends React.PureComponent {
           </Row>
           <Row>
             <Col>
+              <Form.Group controlId="useEncryption">
+                <Form.Check
+                  type="checkbox"
+                  label="Use Encryption"
+                  onChange={this.toggleEncryption}
+                />
+              </Form.Group>
+              <Form.Group controlId="key">
+                <Form.Label>Encryption Key</Form.Label>
+                <Form.Control
+                  type="text"
+                  readOnly={!useEncryption}
+                  ref={(ref) => {
+                    this.key = ref;
+                  }}
+                />
+              </Form.Group>
               <Form.Group controlId="frameOption">
                 <Form.Label>Frame Option</Form.Label>
                 <Form.Control as="select">
@@ -480,30 +500,24 @@ export default class Video extends React.PureComponent {
                   <option value="random">Random</option>
                 </Form.Control>
               </Form.Group>
-              <Form.Group controlId="useEncryption">
-                <Form.Check
-                  type="checkbox"
-                  label="Use Encryption"
-                />
-              </Form.Group>
               <Button
                 variant="primary"
                 type="submit"
                 className="full-width margin-bottom-xs"
-                onClick={() => (this.action = "encrypt")}
+                onClick={() => (this.action = "LSBEmbed")}
               >
                 {" "}
-                Encrypt
+                Hide
               </Button>
 
               <Button
                 variant="info"
                 type="submit"
                 className="full-width"
-                onClick={() => (this.action = "decrypt")}
+                onClick={() => (this.action = "LSBExtract")}
               >
                 {" "}
-                Decrypt
+                Extract
               </Button>
             </Col>
           </Row>
