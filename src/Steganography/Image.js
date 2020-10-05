@@ -325,7 +325,7 @@ export default class Image extends React.PureComponent {
       let dataBitplanes = convertArrayBufferToBitplanesArray(dataBuffer);
       let bufferSizeBitplane = convertIntegerToBitplane(dataBitplanes.length);
       let sourceBitplanes = convertArrayBufferToBitplanesArray(sourceImgData.data);
-      sourceBitplanes = this.convertPBC_CGC(sourceBitplanes, "normal");
+      // sourceBitplanes = this.convertPBC_CGC(sourceBitplanes, "normal");
 
       let hidingOptionInserted = false;
       let fileNameSizeInserted = false;
@@ -381,142 +381,148 @@ export default class Image extends React.PureComponent {
         }
       }
 
-      for (let i = 0; i < noiseRegion.length; i++) {
-        if (i === 0) {
-          let fileNameConjugationSizeBitplane = convertIntegerToBitplane(fileNameConjugationMap.length);
-          if (this.calculateComplexity(fileNameConjugationSizeBitplane) <= alpha) {
-            fileNameConjugationSizeBitplane = this.conjugate(fileNameConjugationSizeBitplane);
+      if (noiseRegion.length >= 2 + fileNameConjugationMap.length + conjugationMap.length + dataBitplanesToBeInserted.length) {
+        for (let i = 0; i < noiseRegion.length; i++) {
+          if (i === 0) {
+            let fileNameConjugationSizeBitplane = convertIntegerToBitplane(fileNameConjugationMap.length);
+            if (this.calculateComplexity(fileNameConjugationSizeBitplane) <= alpha) {
+              fileNameConjugationSizeBitplane = this.conjugate(fileNameConjugationSizeBitplane);
+            }
+            sourceBitplanes[noiseRegion[i]] = fileNameConjugationSizeBitplane;
+          } else if (i < fileNameConjugationMap.length + 1) {
+            let fileNameMapBitplane = convertIntegerToBitplane(fileNameConjugationMap[i-1]);
+            if (this.calculateComplexity(fileNameMapBitplane) <= alpha) {
+              fileNameMapBitplane = this.conjugate(fileNameMapBitplane);
+            }
+            sourceBitplanes[noiseRegion[i]] = fileNameMapBitplane;
+          } else if (i < fileNameConjugationMap.length + 2) {
+            let sizeBitplane = convertIntegerToBitplane(conjugationMap.length);
+            if (this.calculateComplexity(sizeBitplane) <= alpha) {
+              sizeBitplane = this.conjugate(sizeBitplane)
+            }
+            
+            sourceBitplanes[noiseRegion[i]] = sizeBitplane;
+          } else if (i < fileNameConjugationMap.length + 2 + conjugationMap.length) {
+            let excessIndex = fileNameConjugationMap.length + 2;
+            let mapBitplane = convertIntegerToBitplane(conjugationMap[i-excessIndex]);
+            if (this.calculateComplexity(mapBitplane) <= alpha)  {
+              mapBitplane = this.conjugate(mapBitplane);
+            }
+            sourceBitplanes[noiseRegion[i]] = mapBitplane;
+          } else if (i < fileNameConjugationMap.length + 2 + conjugationMap.length + dataBitplanesToBeInserted.length) {
+            let excessIndex = fileNameConjugationMap.length + 2 + conjugationMap.length;
+            sourceBitplanes[noiseRegion[i]] = dataBitplanesToBeInserted[i-excessIndex];
+          } else {
+            break;
           }
-          sourceBitplanes[noiseRegion[i]] = fileNameConjugationSizeBitplane;
-        } else if (i < fileNameConjugationMap.length + 1) {
-          let fileNameMapBitplane = convertIntegerToBitplane(fileNameConjugationMap[i-1]);
-          if (this.calculateComplexity(fileNameMapBitplane) <= alpha) {
-            fileNameMapBitplane = this.conjugate(fileNameMapBitplane);
+        }
+        
+        // sourceBitplanes = this.convertPBC_CGC(sourceBitplanes, "reverse");
+        let resultArrayBuffer = convertBitplanesArrayToArrayBuffer(sourceBitplanes);
+        this.renderResultImg(sourceImgURL, resultArrayBuffer);
+  
+        ////////////////EXTRACT///////////////////
+  
+        sourceBitplanes = convertArrayBufferToBitplanesArray(resultArrayBuffer);
+        // sourceBitplanes = this.convertPBC_CGC(sourceBitplanes, "normal");
+        let result = [];
+        for(let i = 0; i < sourceBitplanes.length; i++) {
+          if (this.calculateComplexity(sourceBitplanes[i]) > alpha) {
+            result.push(sourceBitplanes[i]);
           }
-          sourceBitplanes[noiseRegion[i]] = fileNameMapBitplane;
-        } else if (i < fileNameConjugationMap.length + 2) {
-          let sizeBitplane = convertIntegerToBitplane(conjugationMap.length);
-          if (this.calculateComplexity(sizeBitplane) <= alpha) {
-            sizeBitplane = this.conjugate(sizeBitplane)
-          }
-          sourceBitplanes[noiseRegion[i]] = sizeBitplane;
-        } else if (i < fileNameConjugationMap.length + 2 + conjugationMap.length) {
-          let excessIndex = fileNameConjugationMap.length + 2;
-          let mapBitplane = convertIntegerToBitplane(conjugationMap[i-excessIndex]);
-          if (this.calculateComplexity(mapBitplane) <= alpha)  {
-            mapBitplane = this.conjugate(mapBitplane);
-          }
-          sourceBitplanes[noiseRegion[i]] = mapBitplane;
-        } else if (i < fileNameConjugationMap.length + 2 + conjugationMap.length + dataBitplanesToBeInserted.length) {
-          let excessIndex = fileNameConjugationMap.length + 2 + conjugationMap.length;
-          sourceBitplanes[noiseRegion[i]] = dataBitplanesToBeInserted[i-excessIndex];
+        }
+  
+        let fileNameConjugationMapSize = convertBitplaneToInteger(this.conjugate(result[0]));
+        let fileNameConjugationMaps = [];
+        for (let i = 0; i < fileNameConjugationMapSize; i++) {
+          fileNameConjugationMaps.push(convertBitplaneToInteger(this.conjugate(result[i+1])));
+        }
+  
+        let conjugationMapSize = convertBitplaneToInteger(this.conjugate(result[1+fileNameConjugationMaps.length]));
+        let plusIndex = 2+fileNameConjugationMaps.length;
+        let conjugationMaps = [];
+        for (let i = 0; i < conjugationMapSize; i++) {
+          conjugationMaps.push(convertBitplaneToInteger(this.conjugate(result[i+plusIndex])));
+        }
+  
+        plusIndex += conjugationMaps.length;
+        
+        let hidingCode = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
+        if (hidingCode === 1) {
+          hidingCode = "sequence";
         } else {
-          break;
+          hidingCode = "random";
         }
-      }
-      
-      sourceBitplanes = this.convertPBC_CGC(sourceBitplanes, "reverse");
-      let resultArrayBuffer = convertBitplanesArrayToArrayBuffer(sourceBitplanes);
-      this.renderResultImg(sourceImgURL, resultArrayBuffer);
-
-      ////////////////EXTRACT///////////////////
-
-      sourceBitplanes = convertArrayBufferToBitplanesArray(resultArrayBuffer);
-      sourceBitplanes = this.convertPBC_CGC(sourceBitplanes, "normal");
-      let result = [];
-      for(let i = 0; i < sourceBitplanes.length; i++) {
-        if (this.calculateComplexity(sourceBitplanes[i]) > alpha) {
-          result.push(sourceBitplanes[i]);
+  
+        plusIndex++;
+  
+        let fileNameSize = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
+        
+        plusIndex++;
+  
+        let fileNameBitplanes = [];
+        for (let i = 0; i < fileNameSize; i++) { 
+          fileNameBitplanes.push(result[i+plusIndex]);
         }
-      }
-
-      let fileNameConjugationMapSize = convertBitplaneToInteger(this.conjugate(result[0]));
-      let fileNameConjugationMaps = [];
-      for (let i = 0; i < fileNameConjugationMapSize; i++) {
-        fileNameConjugationMaps.push(convertBitplaneToInteger(this.conjugate(result[i+1])));
-      }
-
-      let conjugationMapSize = convertBitplaneToInteger(this.conjugate(result[1+fileNameConjugationMaps.length]));
-      let plusIndex = 2+fileNameConjugationMaps.length;
-      let conjugationMaps = [];
-      for (let i = 0; i < conjugationMapSize; i++) {
-        conjugationMaps.push(convertBitplaneToInteger(this.conjugate(result[i+plusIndex])));
-      }
-
-      plusIndex += conjugationMaps.length;
-      
-      let hidingCode = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
-      if (hidingCode === 1) {
-        hidingCode = "sequence";
+        
+        plusIndex += fileNameBitplanes.length;
+  
+        let fileNameString = "";
+        for (let i = 0; i < fileNameBitplanes.length; i++) {
+          let bitplane = fileNameBitplanes[i];
+          if (fileNameConjugationMaps.includes(i)) {
+            bitplane = this.conjugate(bitplane);
+          }
+  
+          let binaryString = "";
+          for (let j = 0; j < 64; j++) {
+            binaryString += bitplane[j];
+          }
+          fileNameString += convertBinaryStringToString(binaryString);
+        }
+  
+        let dataSize = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
+        plusIndex++;
+  
+        let resultBitplanes = [];
+        for (let i = 0; i < dataSize; i++) {
+          if (conjugationMaps.includes(i)) {
+            resultBitplanes.push(this.conjugate(result[i+plusIndex]));
+          } else {
+            resultBitplanes.push(result[i+plusIndex]);
+          }
+        }
+        
+        let resultArray = convertBitplanesArrayToArrayBuffer(resultBitplanes);
+        let firstFound = false;
+        let leadingZeroes = 0;
+        for (let i = 0; i < resultArray.length && !firstFound; i++) {
+          if (resultArray[i] !== 0) {
+            firstFound = true;
+          } else {
+            leadingZeroes++;
+          }
+        }
+        
+        let finalArray = new Uint8Array(resultArray.length-leadingZeroes);
+        for (let i = leadingZeroes; i < resultArray.length; i++) {
+          finalArray[i-leadingZeroes] = resultArray[i];
+        }
+        
+        if (useEncryption) {
+          if (hidingOption === "random") {
+            let shuffledArray = Array.from(finalArray);
+            finalArray = shuffleSeed.unshuffle(shuffledArray, encryptionKey);
+          }
+  
+          finalArray = decodeFile(finalArray, encryptionKey);
+        }
+        
+        downloadBinaryFile(fileNameString, finalArray);
       } else {
-        hidingCode = "random";
+        alert("Source capacity is not enough");
       }
 
-      plusIndex++;
-
-      let fileNameSize = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
-      
-      plusIndex++;
-
-      let fileNameBitplanes = [];
-      for (let i = 0; i < fileNameSize; i++) { 
-        fileNameBitplanes.push(result[i+plusIndex]);
-      }
-      
-      plusIndex += fileNameBitplanes.length;
-
-      let fileNameString = "";
-      for (let i = 0; i < fileNameBitplanes.length; i++) {
-        let bitplane = fileNameBitplanes[i];
-        if (fileNameConjugationMaps.includes(i)) {
-          bitplane = this.conjugate(bitplane);
-        }
-
-        let binaryString = "";
-        for (let j = 0; j < 64; j++) {
-          binaryString += bitplane[j];
-        }
-        fileNameString += convertBinaryStringToString(binaryString);
-      }
-
-      let dataSize = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
-      plusIndex++;
-
-      let resultBitplanes = [];
-      for (let i = 0; i < dataSize; i++) {
-        if (conjugationMaps.includes(i)) {
-          resultBitplanes.push(this.conjugate(result[i+plusIndex]));
-        } else {
-          resultBitplanes.push(result[i+plusIndex]);
-        }
-      }
-      
-      let resultArray = convertBitplanesArrayToArrayBuffer(resultBitplanes);
-      let firstFound = false;
-      let leadingZeroes = 0;
-      for (let i = 0; i < resultArray.length && !firstFound; i++) {
-        if (resultArray[i] !== 0) {
-          firstFound = true;
-        } else {
-          leadingZeroes++;
-        }
-      }
-      
-      let finalArray = new Uint8Array(resultArray.length-leadingZeroes);
-      for (let i = leadingZeroes; i < resultArray.length; i++) {
-        finalArray[i-leadingZeroes] = resultArray[i];
-      }
-      
-      if (useEncryption) {
-        if (hidingOption === "random") {
-          let shuffledArray = Array.from(finalArray);
-          finalArray = shuffleSeed.unshuffle(shuffledArray, encryptionKey);
-        }
-
-        finalArray = decodeFile(finalArray, encryptionKey);
-      }
-      
-      downloadBinaryFile(fileNameString, finalArray);
     });
   }
 
@@ -642,7 +648,7 @@ export default class Image extends React.PureComponent {
     let image = document.createElement('img');
     image.src = sourceImgURL;
     canvas.width = image.width;
-    canvas.height = image.height;
+    canvas.height = image.height; 
     let steganoClampedArray = new Uint8ClampedArray(steganoArray);
     let steganoImgData = new ImageData(steganoClampedArray, image.width, image.height);
 
