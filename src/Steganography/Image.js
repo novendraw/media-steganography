@@ -527,107 +527,108 @@ export default class Image extends React.PureComponent {
   }
 
   getBPCS(sourceImgURL, encryptionKey) {
-    let sourceImgData = this.getImageData(sourceImgURL);
-    let sourceBitplanes = convertArrayBufferToBitplanesArray(sourceImgData.data);
-    sourceBitplanes = this.convertPBC_CGC(sourceBitplanes, "normal");
+    alert("Currently extract is done automatically after embedding");
+    // let sourceImgData = this.getImageData(sourceImgURL);
+    // let sourceBitplanes = convertArrayBufferToBitplanesArray(sourceImgData.data);
+    // sourceBitplanes = this.convertPBC_CGC(sourceBitplanes, "normal");
 
-    const alpha = 0.3;
-    let result = [];
-    for(let i = 0; i < sourceBitplanes.length; i++) {
-      if (this.calculateComplexity(sourceBitplanes[i]) > alpha) {
-        result.push(sourceBitplanes[i]);
-      }
-    }
+    // const alpha = 0.3;
+    // let result = [];
+    // for(let i = 0; i < sourceBitplanes.length; i++) {
+    //   if (this.calculateComplexity(sourceBitplanes[i]) > alpha) {
+    //     result.push(sourceBitplanes[i]);
+    //   }
+    // }
 
-    let fileNameConjugationMapSize = convertBitplaneToInteger(this.conjugate(result[0]));
-    let fileNameConjugationMap = [];
-    for (let i = 0; i < fileNameConjugationMapSize; i++) {
-      fileNameConjugationMap.push(convertBitplaneToInteger(this.conjugate(result[i+1])));
-    }
+    // let fileNameConjugationMapSize = convertBitplaneToInteger(this.conjugate(result[0]));
+    // let fileNameConjugationMap = [];
+    // for (let i = 0; i < fileNameConjugationMapSize; i++) {
+    //   fileNameConjugationMap.push(convertBitplaneToInteger(this.conjugate(result[i+1])));
+    // }
 
-    let conjugationMapSize = convertBitplaneToInteger(this.conjugate(result[1+fileNameConjugationMap.length]));
-    let plusIndex = 2+fileNameConjugationMap.length;
-    let conjugationMap = [];
-    for (let i = 0; i < conjugationMapSize; i++) {
-      conjugationMap.push(convertBitplaneToInteger(this.conjugate(result[i+plusIndex])));
-    }
+    // let conjugationMapSize = convertBitplaneToInteger(this.conjugate(result[1+fileNameConjugationMap.length]));
+    // let plusIndex = 2+fileNameConjugationMap.length;
+    // let conjugationMap = [];
+    // for (let i = 0; i < conjugationMapSize; i++) {
+    //   conjugationMap.push(convertBitplaneToInteger(this.conjugate(result[i+plusIndex])));
+    // }
 
-    plusIndex += conjugationMap.length;
+    // plusIndex += conjugationMap.length;
     
-    let hidingOption = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
-    if (hidingOption === 1) {
-      hidingOption = "sequence";
-    } else {
-      hidingOption = "random";
-    }
+    // let hidingOption = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
+    // if (hidingOption === 1) {
+    //   hidingOption = "sequence";
+    // } else {
+    //   hidingOption = "random";
+    // }
 
-    plusIndex++;
+    // plusIndex++;
 
-    let fileNameSize = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
+    // let fileNameSize = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
     
-    plusIndex++;
+    // plusIndex++;
 
-    let fileNameBitplanes = [];
-    for (let i = 0; i < fileNameSize; i++) { 
-      fileNameBitplanes.push(result[i+plusIndex]);
-    }
+    // let fileNameBitplanes = [];
+    // for (let i = 0; i < fileNameSize; i++) { 
+    //   fileNameBitplanes.push(result[i+plusIndex]);
+    // }
     
-    plusIndex += fileNameBitplanes.length;
+    // plusIndex += fileNameBitplanes.length;
 
-    let fileName = "";
-    for (let i = 0; i < fileNameBitplanes.length; i++) {
-      let bitplane = fileNameBitplanes[i];
-      if (fileNameConjugationMap.includes(i)) {
-        bitplane = this.conjugate(bitplane);
-      }
+    // let fileName = "";
+    // for (let i = 0; i < fileNameBitplanes.length; i++) {
+    //   let bitplane = fileNameBitplanes[i];
+    //   if (fileNameConjugationMap.includes(i)) {
+    //     bitplane = this.conjugate(bitplane);
+    //   }
 
-      let binaryString = "";
-      for (let j = 0; j < 64; j++) {
-        binaryString += bitplane[j];
-      }
-      fileName += convertBinaryStringToString(binaryString);
-    }
+    //   let binaryString = "";
+    //   for (let j = 0; j < 64; j++) {
+    //     binaryString += bitplane[j];
+    //   }
+    //   fileName += convertBinaryStringToString(binaryString);
+    // }
 
-    let dataSize = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
-    plusIndex++;
+    // let dataSize = convertBitplaneToInteger(this.conjugate(result[plusIndex]));
+    // plusIndex++;
 
-    let resultBitplanes = [];
-    for (let i = 0; i < dataSize; i++) {
-      if (conjugationMap.includes(i)) {
-        resultBitplanes.push(this.conjugate(result[i+plusIndex]));
-      } else {
-        resultBitplanes.push(result[i+plusIndex]);
-      }
-    }
+    // let resultBitplanes = [];
+    // for (let i = 0; i < dataSize; i++) {
+    //   if (conjugationMap.includes(i)) {
+    //     resultBitplanes.push(this.conjugate(result[i+plusIndex]));
+    //   } else {
+    //     resultBitplanes.push(result[i+plusIndex]);
+    //   }
+    // }
     
-    let resultArray = convertBitplanesArrayToArrayBuffer(resultBitplanes);
-    let firstFound = false;
-    let leadingZeroes = 0;
-    for (let i = 0; i < resultArray.length && !firstFound; i++) {
-      if (resultArray[i] !== 0) {
-        firstFound = true;
-      } else {
-        leadingZeroes++;
-      }
-    }
+    // let resultArray = convertBitplanesArrayToArrayBuffer(resultBitplanes);
+    // let firstFound = false;
+    // let leadingZeroes = 0;
+    // for (let i = 0; i < resultArray.length && !firstFound; i++) {
+    //   if (resultArray[i] !== 0) {
+    //     firstFound = true;
+    //   } else {
+    //     leadingZeroes++;
+    //   }
+    // }
     
-    let finalArray = new Uint8Array(resultArray.length-leadingZeroes);
-    for (let i = leadingZeroes; i < resultArray.length; i++) {
-      finalArray[i-leadingZeroes] = resultArray[i];
-    }
+    // let finalArray = new Uint8Array(resultArray.length-leadingZeroes);
+    // for (let i = leadingZeroes; i < resultArray.length; i++) {
+    //   finalArray[i-leadingZeroes] = resultArray[i];
+    // }
 
-    const { useEncryption } = this.state;
+    // const { useEncryption } = this.state;
 
-    if (useEncryption) {
-      if (hidingOption === "random") {
-        let shuffledArray = Array.from(finalArray);
-        finalArray = shuffleSeed.unshuffle(shuffledArray, encryptionKey);
-      }
+    // if (useEncryption) {
+    //   if (hidingOption === "random") {
+    //     let shuffledArray = Array.from(finalArray);
+    //     finalArray = shuffleSeed.unshuffle(shuffledArray, encryptionKey);
+    //   }
 
-      finalArray = decodeFile(finalArray, encryptionKey);
-    }
+    //   finalArray = decodeFile(finalArray, encryptionKey);
+    // }
     
-    downloadBinaryFile(fileName, finalArray);
+    // downloadBinaryFile(fileName, finalArray);
   }
 
   renderImg = (file) => {
