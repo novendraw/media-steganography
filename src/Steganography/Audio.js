@@ -55,7 +55,7 @@ export default class Audio extends React.PureComponent {
         if (message !== undefined) {
             message = new Uint8Array(await readFileAsArrayBuffer(message));
             if (this.state.useEncryption) {
-                message = encodeFile(message, document.getElementById('key').value);
+                message = encodeFile(message, document.getElementById('audiokey').value);
             }
             return message
         } else {
@@ -74,6 +74,12 @@ export default class Audio extends React.PureComponent {
 
     async hideMessage(event) {
         event.preventDefault();
+        if (this.state.useEncryption || this.state.useRandom) {
+            if (document.getElementById('audiokey').value === "") {
+                alert("please input key");
+                return;
+            }
+        }
         let files = document.getElementById('inputSourceAudio').files;
         let source = new Uint8Array(await readFileAsArrayBuffer(files[0]));
         source = convertArrayBufferToBinaryString(source);
@@ -102,7 +108,7 @@ export default class Audio extends React.PureComponent {
         let i = 359;
         if (this.state.useRandom) {
             let rand = require('random-seed').create();
-            rand.seed(document.getElementById('key').value);
+            rand.seed(document.getElementById('audiokey').value);
             while ((embedded.length > ((i - 351) / 8) - 1) && (i < 16744)) {
                 if ((i + 1) % 8 !== 0 ||
                     embedded.charAt(((i - 351) / 8) - 1) === undefined ||
@@ -154,12 +160,22 @@ export default class Audio extends React.PureComponent {
 
     async extractMessage(event) {
         event.preventDefault();
+        if (!this.state.useRandom) {
+            document.getElementById('audiokey').value = "";
+        }
+        if (this.state.useEncryption || this.state.useRandom) {
+            if (document.getElementById('audiokey').value === "") {
+                alert("please input key");
+                return;
+            }
+        }
         let files = document.getElementById('inputSourceAudio').files;
         let source = new Uint8Array(await readFileAsArrayBuffer(files[0]));
         source = convertArrayBufferToBinaryString(source);
-        let useRandom = false;
         if (source.charAt(359) === '0') {
-            useRandom = true;
+            this.setState({useRandom: true});
+        } else {
+            this.setState({useRandom: false});
         }
         let filename = "";
 
@@ -177,9 +193,13 @@ export default class Audio extends React.PureComponent {
         size = parseInt(size, 2) * 8;
 
         let message = "";
-        if (useRandom) {
-            let rand = require('random-seed').create(document.getElementById('key').value);
-            rand.seed(document.getElementById('key').value);
+        if (this.state.useRandom) {
+            if (document.getElementById('audiokey').value === "") {
+                alert("please input key");
+                return;
+            }
+            let rand = require('random-seed').create();
+            rand.seed(document.getElementById('audiokey').value);
             let remainder = source.length - 16744;
             remainder /= 8;
             let randomizedSet = new Set();
@@ -201,7 +221,11 @@ export default class Audio extends React.PureComponent {
         }
         message = convertBinaryStringToArrayBuffer(message);
         if (this.state.useEncryption) {
-            message = decodeFile(message, document.getElementById('key').value);
+            if (document.getElementById('audiokey').value === "") {
+                alert("please input key");
+                return;
+            }
+            message = decodeFile(message, document.getElementById('audiokey').value);
         }
         let file = new File([message], this.state.messageFilename);
         this.setState({extractedMessage: URL.createObjectURL(file)});
@@ -291,7 +315,7 @@ export default class Audio extends React.PureComponent {
                                     <option value="extract">Extract message from media</option>
                                 </Form.Control>
                             </Form.Group>
-                            <Form.Group controlId="key"
+                            <Form.Group controlId="audiokey"
                                         hidden={!this.state.useEncryption && !this.state.useRandom}>
                                 <Form.Label>Encryption Key</Form.Label>
                                 <Form.Control
