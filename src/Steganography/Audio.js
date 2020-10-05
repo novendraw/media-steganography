@@ -160,7 +160,7 @@ export default class Audio extends React.PureComponent {
 
     async extractMessage(event) {
         event.preventDefault();
-        if (!this.state.useRandom) {
+        if (!this.state.useRandom && !this.state.useEncryption) {
             document.getElementById('audiokey').value = "";
         }
         if (this.state.useEncryption || this.state.useRandom) {
