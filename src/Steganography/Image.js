@@ -26,7 +26,7 @@ import {
   downloadBinaryFile,
 } from './helper';
 
-import shuffleSeed, { shuffle } from 'shuffle-seed';
+import shuffleSeed from 'shuffle-seed';
 
 export default class Image extends React.PureComponent {
   constructor(props) {
@@ -47,6 +47,7 @@ export default class Image extends React.PureComponent {
       resultCanvas: null,
       resultImgURL: null,
       useEncryption: false,
+      psnr: null,
     };
   }
 
@@ -76,12 +77,16 @@ export default class Image extends React.PureComponent {
     let fileData = readFileAsArrayBuffer(fileToHide);
     fileData.then(fileArray => {
       let buffer = new Uint8Array(fileArray);
+      let bufferArray = Array.from(buffer);
 
       const { useEncryption } = this.state;
       if (useEncryption) {
-        buffer = encodeFile(buffer, encryptionKey);
+        bufferArray = encodeFile(bufferArray, encryptionKey);
+        if (hidingOption === "random") {
+          bufferArray = shuffleSeed.shuffle(bufferArray, encryptionKey);
+        }
       }
-
+      
       let bufferLength = buffer.length;
       
       //total bits for file needed = filesize(byte) * 8 (bit/byte) * 8 (1 bit at every source byte)
@@ -109,10 +114,6 @@ export default class Image extends React.PureComponent {
         let fileSize = bufferLength.toString(2);
         fileSize = "00000000000000000000000000000000".substr(fileSize.length) + fileSize;
 
-        let bufferArray = Array.from(buffer);
-        if (useEncryption && hidingOption === "random") {
-          bufferArray = shuffleSeed.shuffle(bufferArray, encryptionKey);
-        }
         let bufferString = convertArrayBufferToBinaryString(bufferArray);
 
         this.setState({buffer: bufferString});
@@ -646,6 +647,23 @@ export default class Image extends React.PureComponent {
     let resultImg = new Image();
     resultImg.src = canvas.toDataURL();
     this.setState({resultImgURL: resultImg.src, resultCanvas: canvas});
+
+    this.calculatePSNR(image.width, image.height, sourceImgURL, steganoImgData);
+  }
+
+  calculatePSNR(M, N, sourceImgURL, resultImgData) {
+    let value = 0;
+    let sourceImgData = this.getImageData(sourceImgURL);
+
+    for (let i = 0; i < sourceImgData.data.length; i++) {
+      value += Math.pow(sourceImgData.data[i] - resultImgData.data[i], 2);
+    }
+
+    let rms = Math.sqrt( (1 / (M*N) ) * value );
+    let psnr = 20 * Math.log10(256/rms);
+    psnr = Math.round(psnr * 100) / 100;
+    this.setState({psnr: psnr});
+    return psnr;
   }
 
   downloadFromCanvas(fileName, canvas) {
@@ -700,7 +718,7 @@ export default class Image extends React.PureComponent {
   }
 
   render() {
-    const { sourceImgURL, resultCanvas, resultImgURL, useEncryption } = this.state;
+    const { sourceImgURL, resultCanvas, resultImgURL, useEncryption, psnr } = this.state;
     return (
       <React.Fragment>
         <Form onSubmit={this.handleSubmit} className="margin-bottom-md">
@@ -759,6 +777,9 @@ export default class Image extends React.PureComponent {
                     Download Result
                   </Button>
                 </Col>
+              </Row>
+              <Row>
+                <div className="bold">PSNR: {psnr ? psnr : "-"}</div>
               </Row>
             </Col>
 
