@@ -94,7 +94,7 @@ export default class Audio extends React.PureComponent {
         filename = "0".repeat(2016 - filename.length) + filename;
         embedded += filename;
         let fileSize = message.length / 8;
-        fileSize = convertStringToBinaryString(fileSize.toString());
+        fileSize = fileSize.toString(2);
         fileSize = "0".repeat(32 - fileSize.length) + fileSize;
         embedded += fileSize;
         embedded += message;
@@ -174,9 +174,7 @@ export default class Audio extends React.PureComponent {
             size += source.charAt(16495 + i * 8);
         }
 
-        size = convertBinaryStringToString(size);
-
-        size = parseInt(size) * 8;
+        size = parseInt(size, 2) * 8;
 
         let message = "";
         if (useRandom) {
