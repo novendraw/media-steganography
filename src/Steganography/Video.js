@@ -38,8 +38,9 @@ export default class Video extends React.PureComponent {
       message: null,
       messageURL: null,
       resultVid: null,
+      resultVidURL: null,
       seed: null,
-      resultVidFilename: null,
+      resultFilename: "",
       useEncryption: false,
     };
   }
@@ -49,10 +50,9 @@ export default class Video extends React.PureComponent {
     // Read AVI File
     let riff = new RIFFFile();
     riff.setSignature(plainText)
-    
+    console.log(riff.signature)
     // Find subChunks with format 'movi' indicating video data
     let iData = 0
-    console.log(riff.signature)
     for (let i = 0; i < riff.signature.subChunks.length; i++) {
       if (riff.signature.subChunks[i].chunkId === 'LIST' && riff.signature.subChunks[i].format === 'movi') {
         iData = i
@@ -83,7 +83,6 @@ export default class Video extends React.PureComponent {
     if (frameOption === 'random') {
       frames = shuffleSeed.shuffle(frames, seed)
     }
-    console.log(frames)
 
     if (messageLength * 8 > dataSize) {
       alert("Source capacity is not enough");
@@ -116,8 +115,6 @@ export default class Video extends React.PureComponent {
     // LSB algorithm
     for (let i = 0; i < binaryMessage.length; i++) {
       let binaryPlainText = ("000000000" + plainText[plainTextBytes[i]].toString(2)).substr(-8)
-      // console.log(binaryPlainText)
-      // console.log(plainText[plainTextBytes[i]])
       binaryPlainText = binaryPlainText.substring(0, 7) + binaryMessage[i]
       let bytesPlainText = parseInt(binaryPlainText, 2)
 
@@ -171,9 +168,7 @@ export default class Video extends React.PureComponent {
     }
 
     // filesize
-    console.log(messageLength)
     let filesizeBinary = messageLength.toString(2)
-    console.log(filesizeBinary)
     while (filesizeBinary.length < 32) {
       filesizeBinary = '0' + filesizeBinary
     }
@@ -183,7 +178,7 @@ export default class Video extends React.PureComponent {
       iJunk += 1
     }
 
-    this.setState({ resultVidFilename: "result.avi" })
+    this.setState({ resultFilename: "result.avi" })
     this.setState({ resultVid: cipherText })
 
   }
@@ -244,7 +239,6 @@ export default class Video extends React.PureComponent {
 
     // Find subChunks with format 'movi' indicating video data
     let iData = 0
-    console.log(riff.signature)
     for (let i = 0; i < riff.signature.subChunks.length; i++) {
       if (riff.signature.subChunks[i].chunkId === 'LIST' && riff.signature.subChunks[i].format === 'movi') {
         iData = i
@@ -269,7 +263,6 @@ export default class Video extends React.PureComponent {
     if (frameOption === 'random') {
       frames = shuffleSeed.shuffle(frames, seed)
     }
-    console.log(frames)
     
     // construct stream of frames used
     let bytesSize = 0
@@ -292,8 +285,6 @@ export default class Video extends React.PureComponent {
     let binaryOutputMessage = ''
     for (let i = 0; i < binaryMessageLength; i++) {
       let binaryCipherText = ("000000000" + cipherText[cipherTextBytes[i]].toString(2)).substr(-8)
-      // console.log(binaryPlainText)
-      // console.log(plainText[plainTextBytes[i]])
       binaryOutputMessage += binaryCipherText[7]
     }
 
@@ -311,7 +302,7 @@ export default class Video extends React.PureComponent {
       outputMessage = decodeFile(outputMessage, key)
     }
 
-    this.setState({ resultVidFilename: filenameString })
+    this.setState({ resultFilename: filenameString })
     this.setState({ resultVid: outputMessage })
   }
 
@@ -422,20 +413,25 @@ export default class Video extends React.PureComponent {
     this.setState({ useEncryption: event.target.checked });
   }
 
+  saveFileName = (event) => {
+    this.setState({ resultFilename: event.target.value });
+  }
+
   render() {
-    const { sourceVidURL, messageURL, resultVid, resultVidURL, resultVidFilename, useEncryption} = this.state;
+    const { sourceVidURL, messageURL, resultVid, resultVidURL, resultFilename, useEncryption} = this.state;
     return (
       <React.Fragment>
         <Form onSubmit={this.handleSubmit} className="margin-bottom-md">
           <Row>
             <Col xs={4} className="content-start">
-              <div className="content-center subheadline bold margin-bottom-sm">
+              <div className="content-center subheadline bold margin-bottom-xxl">
                 Source Media
               </div>
-              <div className="content-center full-width margin-bottom-xs">
-                <ResponsiveEmbed aspectRatio="16by9">
+              <div className="body-text bold margin-bottom-sm">
+                {/* <ResponsiveEmbed aspectRatio="16by9">
                   <video src={sourceVidURL} className="full-height" controls/>
-                </ResponsiveEmbed>
+                </ResponsiveEmbed> */}
+                Choose source video
               </div>
               <Form.Group>
                 <Form.File id="inputSourceVid" label="Upload source video" onChange={(e) => this.renderVid(e.target.files, "source")} accept="video/avi"/>
@@ -444,10 +440,10 @@ export default class Video extends React.PureComponent {
 
             <Col xs={4}>
               <div className="content-center subheadline bold margin-bottom-xxl">
-                Secret Message Media
+                File to Hide
               </div>
               <div className="body-text bold margin-bottom-sm">
-                Choose file to hide within source image
+                Choose file to hide within source video
               </div>
               <Form.Group>
                 <Form.File id="inputMessage" onChange={(e) => this.renderVid(e.target.files, "message")}/>
@@ -455,24 +451,40 @@ export default class Video extends React.PureComponent {
             </Col>
 
             <Col xs={4}>
-              <div className="content-center subheadline bold margin-bottom-sm">
+              <div className="content-center subheadline bold margin-bottom-xxl">
                 Result Media
               </div>
-              <div className="full-width margin-bottom-xs">
-                <ResponsiveEmbed aspectRatio="16by9">
+              <div className="body-text bold margin-bottom-sm">
+                {/* <ResponsiveEmbed aspectRatio="16by9">
                   <video src={resultVidURL} className="full-height" controls/>
-                </ResponsiveEmbed>
-                Download Result Media
+                </ResponsiveEmbed> */}
+                Download Result Video
               </div>
-              <Button
-                variant="success"
-                type="button"
-                className="margin-bottom-xs"
-                onClick={() => downloadBinaryFile(resultVidFilename, resultVid)}
-              >
-                {" "}
-                Download Result
-              </Button>
+              <Row>
+                <div>Enter filename with extension</div>
+              </Row>
+              <Row>
+                <Col className="no-indent">
+                  <Form.Group controlId="filenameField">
+                    <Form.Control
+                      value={resultFilename}
+                      type="text"
+                      onChange={(event) => { this.saveFileName(event) }}
+                    />
+                  </Form.Group>
+                </Col>
+                <Col className="no-indent">
+                  <Button
+                    variant="success"
+                    type="button"
+                    className="margin-bottom-xs"
+                    onClick={() => downloadBinaryFile(resultFilename, resultVid)}
+                  >
+                    {" "}
+                    Download Result
+                  </Button>
+                </Col>
+              </Row>
             </Col>
           </Row>
           <Row>
