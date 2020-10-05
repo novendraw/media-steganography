@@ -42,6 +42,7 @@ export default class Video extends React.PureComponent {
       seed: null,
       resultFilename: "",
       useEncryption: false,
+      psnrValue: null,
     };
   }
 
@@ -99,11 +100,13 @@ export default class Video extends React.PureComponent {
     let bytesSize = 0
     let iFrame = 0
     let plainTextBytes = []
+    let framesSize = []
     while (bytesSize < binaryMessage.length) {
       let arrayBytes = []
       for (let i = frames[iFrame].chunkData.start; i < frames[iFrame].chunkData.end; i++) {
         arrayBytes.push(i)
       }
+      framesSize.push(frames[iFrame].chunkSize)
       if (hidingOption === 'random') {
         arrayBytes = shuffleSeed.shuffle(arrayBytes, seed)
       }
@@ -111,14 +114,22 @@ export default class Video extends React.PureComponent {
       bytesSize += frames[iFrame].chunkSize
       iFrame += 1
     }
+    let diff = bytesSize - binaryMessage.length
+    // framesSize[framesSize.length - 1] = framesSize[framesSize.length - 1] - diff
 
     // LSB algorithm
+    let bytesDifference = []
     for (let i = 0; i < binaryMessage.length; i++) {
       let binaryPlainText = ("000000000" + plainText[plainTextBytes[i]].toString(2)).substr(-8)
       binaryPlainText = binaryPlainText.substring(0, 7) + binaryMessage[i]
       let bytesPlainText = parseInt(binaryPlainText, 2)
-
+      
+      bytesDifference.push(Math.pow(Math.abs(cipherText[plainTextBytes[i]] - bytesPlainText), 2))
       cipherText[plainTextBytes[i]] = bytesPlainText
+    }
+
+    for (let i = 0; i < diff; i++) {
+      bytesDifference.push(0)
     }
 
     // insert metadata to 'JUNK'
@@ -178,6 +189,29 @@ export default class Video extends React.PureComponent {
       iJunk += 1
     }
 
+    // calculate psnr
+    let averagePsnrArray = []
+    let iDiff = 0;
+    for (let i = 0; i < framesSize.length; i++) {
+      let psnr = 0;
+      let rms = 0;
+      let total = 0;
+      for (let j = 0; j < framesSize[i]; j++) {
+        total += bytesDifference[iDiff]
+        iDiff += 1
+      }
+      rms = Math.sqrt(total / framesSize[i])
+      psnr = 20 * Math.log10(255/rms)
+      averagePsnrArray.push(psnr)
+    }
+
+    let averagePsnr = 0
+    for (let i = 0; i < averagePsnrArray.length; i++) {
+      averagePsnr += averagePsnrArray[i]
+    }
+    averagePsnr = averagePsnr / averagePsnrArray.length
+
+    this.setState({ psnrValue: averagePsnr })
     this.setState({ resultFilename: "result.avi" })
     this.setState({ resultVid: cipherText })
 
@@ -418,7 +452,7 @@ export default class Video extends React.PureComponent {
   }
 
   render() {
-    const { sourceVidURL, messageURL, resultVid, resultVidURL, resultFilename, useEncryption} = this.state;
+    const { sourceVidURL, messageURL, resultVid, resultVidURL, resultFilename, useEncryption, psnrValue} = this.state;
     return (
       <React.Fragment>
         <Form onSubmit={this.handleSubmit} className="margin-bottom-md">
@@ -485,6 +519,9 @@ export default class Video extends React.PureComponent {
                   </Button>
                 </Col>
               </Row>
+              <div>
+                PSNR: {psnrValue}
+              </div>
             </Col>
           </Row>
           <Row>
