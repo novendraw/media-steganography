@@ -29,6 +29,7 @@ export default class Audio extends React.PureComponent {
         this.getMessage = this.getMessage.bind(this);
         this.hideMessage = this.hideMessage.bind(this);
         this.extractMessage = this.extractMessage.bind(this);
+        this.count_psnr = this.count_psnr.bind(this);
     }
 
     toggleEncryption = (event) => {
@@ -156,6 +157,16 @@ export default class Audio extends React.PureComponent {
             lastModifiedDate: document.getElementById("inputSourceAudio").files[0].lastModifiedDate
         });
         this.setState({audioResult: URL.createObjectURL(file)});
+        this.count_psnr(convertBinaryStringToArrayBuffer(source), result);
+    }
+
+    count_psnr(source, result) {
+        let sum = 0;
+        for (let i = 0; i < source.length; i++) {
+            sum += Math.pow((source[i] - result[i]), 2);
+        }
+        let psnr = 20 * Math.log10(255 / Math.sqrt(sum / source.length));
+        alert("PSNR : " + psnr.toFixed(2) + " dB");
     }
 
     async extractMessage(event) {
