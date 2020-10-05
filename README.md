@@ -21,6 +21,16 @@ Made by:
     npm start
     ```
 
+### Deploy Build in bin folder
+1. Install Serve
+    ```sh
+    npm install -g serve
+    ```
+2. Deploy with static server
+    ```sh
+    serve -s build
+    ```
+
 ### How to Use
 ##### Embedding
 1. Upload carrier media
