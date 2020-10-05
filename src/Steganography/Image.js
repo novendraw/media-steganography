@@ -77,16 +77,19 @@ export default class Image extends React.PureComponent {
     let fileData = readFileAsArrayBuffer(fileToHide);
     fileData.then(fileArray => {
       let buffer = new Uint8Array(fileArray);
-      let bufferArray = Array.from(buffer);
 
+      let bufferArray = null;
       const { useEncryption } = this.state;
       if (useEncryption) {
-        bufferArray = encodeFile(bufferArray, encryptionKey);
+        buffer = encodeFile(buffer, encryptionKey);
+        bufferArray = Array.from(buffer);
         if (hidingOption === "random") {
           bufferArray = shuffleSeed.shuffle(bufferArray, encryptionKey);
         }
+      } else {
+        bufferArray = Array.from(buffer);
       }
-      
+
       let bufferLength = buffer.length;
       
       //total bits for file needed = filesize(byte) * 8 (bit/byte) * 8 (1 bit at every source byte)
