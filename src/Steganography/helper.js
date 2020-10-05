@@ -134,7 +134,89 @@ function convertBinaryArrayToArrayBuffer(binaryArray) {
   return result;
 }
 
+// Binary Array <=> Bitplanes
+function convertArrayBufferToBitplanesArray(array) {
+  let result = [];
+  let binaryString = convertArrayBufferToBinaryString(array);
+
+  let modRemainder = binaryString.length % 64;
+  if (modRemainder !== 0) {
+    let header = "0";
+    header = header.repeat(64 - modRemainder);
+    binaryString = header + binaryString;
+  }
+
+  while (binaryString.length > 0) {
+    let bitplane = [];
+    let substr = binaryString.substr(0, 64);
+    for (let i = 0; i < substr.length; i++) {
+      bitplane.push(substr[i]);
+    }
+    result.push(bitplane);
+    binaryString = binaryString.substring(64);
+  }
+
+  return result;
+}
+
+function convertBitplanesArrayToArrayBuffer(bitplanesArray) {
+  let result = new Uint8Array(bitplanesArray.length*8);
+  let dataCounter = 0;
+  for (let i = 0; i < bitplanesArray.length; i++) {
+    for (let j = 0; j < 64; j+=8) {
+      let byte = bitplanesArray[i][j] + bitplanesArray[i][j+1] +
+                 bitplanesArray[i][j+2] + bitplanesArray[i][j+3] +
+                 bitplanesArray[i][j+4] + bitplanesArray[i][j+5] +
+                 bitplanesArray[i][j+6] + bitplanesArray[i][j+7];
+      byte = parseInt(byte, 2);
+      result[dataCounter] = byte;
+      dataCounter++;
+    }
+  }
+  return result;
+}
+
+//Integer <=> Bitplane
+function convertIntegerToBitplane(integer) {
+  let bitplane = [];
+  let string = integer.toString(2);
+  let modRemainder = string.length % 64;
+  if (modRemainder !== 0) {
+    let header = "0";
+    header = header.repeat(64 - modRemainder);
+    string = header + string;
+  }
+
+  for (let i = 0; i < 64; i++) {
+    bitplane.push(string[i]);
+  }
+
+  return bitplane;
+}
+
+function convertBitplaneToInteger(bitplane) {
+  let firstFound = false;
+  let binaryString = "";
+  for (let i = 0; i < bitplane.length; i++) {
+    if (!firstFound) {
+      if (bitplane[i] === "1") {
+        firstFound = true;
+        binaryString += bitplane[i];
+      }
+    } else {
+      binaryString += bitplane[i];
+    }
+  }
+
+  if (!firstFound) {
+    return 0;
+  } else {
+    return parseInt(binaryString, 2);
+  }
+}
+
 // Binary Methods
+
 function removeLeadingZeroes(binaryString) {
   let string = binaryString.replace(/^0+/, '');
   let modRemainder = string.length % 8;
@@ -236,6 +318,11 @@ export {
   convertBinaryStringToString,
   convertBinaryArrayToArrayBuffer,
   convertBinaryStringToArrayBufferWithLeadingZeroes,
+  convertArrayBufferToBitplanesArray,
+  convertBitplanesArrayToArrayBuffer,
+  convertIntegerToBitplane,
+  convertBitplaneToInteger,
+  removeLeadingZeroes,
   readFileAsArrayBuffer,
   readFileAsString,
   readTwoFiles,
